@@ -10,12 +10,26 @@ def _get_env(key: str, default: str = "") -> str:
     return v if v is not None else default
 
 def _split_csv(s: str) -> List[str]:
-    return [x.strip() for x in s.split(",") if x.strip()]
+    # Support both western comma and full-width Chinese comma to avoid silent
+    # misconfiguration when users copy/paste gift names from Chinese sources.
+    normalized = (s or "").replace("，", ",")
+    return [x.strip() for x in normalized.split(",") if x.strip()]
+
+
+def _split_csv_ints(s: str) -> List[int]:
+    values: List[int] = []
+    for item in _split_csv(s):
+        try:
+            values.append(int(item))
+        except ValueError:
+            continue
+    return values
 
 @dataclass(frozen=True)
 class Settings:
     room_id: int
     target_gifts: List[str]
+    target_gift_ids: List[int]
     target_min_num: int
 
     bot_sessdata: str
@@ -33,11 +47,13 @@ class Settings:
 def get_settings() -> Settings:
     room_id = int(_get_env("BILI_ROOM_ID", "1852633038"))
     target_gifts = _split_csv(_get_env("TARGET_GIFTS", "人气票"))
+    target_gift_ids = _split_csv_ints(_get_env("TARGET_GIFT_IDS", ""))
     target_min_num = int(_get_env("TARGET_MIN_NUM", "50"))
 
     return Settings(
         room_id=room_id,
         target_gifts=target_gifts,
+        target_gift_ids=target_gift_ids,
         target_min_num=target_min_num,
 
         bot_sessdata=_get_env("BOT_SESSDATA", ""),

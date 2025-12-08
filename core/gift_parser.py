@@ -30,7 +30,7 @@ def parse_send_gift(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
         uid = 0
     uname = str(data.get("uname") or "")
 
-    gift_name = str(data.get("giftName") or data.get("gift_name") or "")
+    gift_name = str(data.get("giftName") or data.get("gift_name") or "").strip()
     try:
         gift_id = int(data.get("giftId") or data.get("gift_id") or 0)
     except Exception:
