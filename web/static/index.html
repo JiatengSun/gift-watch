@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gift Watch</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    input { padding: 8px 10px; min-width: 220px; }
+    button { padding: 8px 12px; cursor: pointer; }
+    pre { background: #111; color: #eee; padding: 12px; border-radius: 8px; overflow: auto; }
+    .hint { color: #666; font-size: 12px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h2>Gift Watch</h2>
+  <div class="row">
+    <input id="uname" placeholder="用户名（精确匹配）" />
+    <input id="gift" placeholder="礼物名（可选）" />
+    <button id="btnSearch">搜索</button>
+  </div>
+  <div class="hint">数据来自本地数据库。若你在远程访问，请确保后端端口已正确转发。</div>
+  <h3>结果</h3>
+  <pre id="out">[]</pre>
+
+<script>
+async function search() {
+  const uname = document.getElementById("uname").value.trim();
+  const gift = document.getElementById("gift").value.trim();
+  if (!uname) {
+    alert("请输入用户名");
+    return;
+  }
+  const url = gift
+    ? `/api/search?uname=${encodeURIComponent(uname)}&gift_name=${encodeURIComponent(gift)}`
+    : `/api/search?uname=${encodeURIComponent(uname)}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  document.getElementById("out").textContent = JSON.stringify(data, null, 2);
+}
+
+document.getElementById("btnSearch").addEventListener("click", search);
+</script>
+</body>
+</html>

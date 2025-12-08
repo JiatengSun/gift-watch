@@ -1,0 +1,13 @@
+name: gift-watch
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - bilibili-api-python>=17.0.0
+      - aiohttp>=3.11.0
+      - fastapi>=0.110.0
+      - uvicorn>=0.23.0
+      - python-dotenv>=1.0.0
