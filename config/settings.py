@@ -1,3 +1,4 @@
+import logging
 import os
 from dataclasses import dataclass
 from typing import List
@@ -31,6 +32,7 @@ class Settings:
     target_gifts: List[str]
     target_gift_ids: List[int]
     target_min_num: int
+    log_level: int
 
     bot_sessdata: str
     bot_bili_jct: str
@@ -50,11 +52,23 @@ def get_settings() -> Settings:
     target_gift_ids = _split_csv_ints(_get_env("TARGET_GIFT_IDS", ""))
     target_min_num = int(_get_env("TARGET_MIN_NUM", "50"))
 
+    def _get_log_level() -> int:
+        level_name = _get_env("LOG_LEVEL", "INFO").strip().upper()
+        # Prefer explicit numeric levels when provided (e.g. 10, 20).
+        if level_name.isdigit():
+            return int(level_name)
+
+        level = getattr(logging, level_name, logging.INFO)
+        if isinstance(level, int):
+            return level
+        return logging.INFO
+
     return Settings(
         room_id=room_id,
         target_gifts=target_gifts,
         target_gift_ids=target_gift_ids,
         target_min_num=target_min_num,
+        log_level=_get_log_level(),
 
         bot_sessdata=_get_env("BOT_SESSDATA", ""),
         bot_bili_jct=_get_env("BOT_BILI_JCT", ""),

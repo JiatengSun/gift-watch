@@ -37,6 +37,8 @@ class IngestPipeline:
 
         cmd = event.get("cmd") or event.get("command")
         if cmd and cmd != "SEND_GIFT":
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
             return
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("收到事件 cmd=%s keys=%s", cmd, list(event.keys()))
