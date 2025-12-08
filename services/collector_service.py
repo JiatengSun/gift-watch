@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Awaitable, Callable, Any, Dict
+import logging
 
 from bilibili_api import live
 
@@ -12,21 +13,35 @@ class CollectorService:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.room = live.LiveRoom(room_display_id=settings.room_id)
-        self.danmaku = live.LiveDanmaku(self.room)
+        # LiveDanmaku expects the numeric room display id, not a LiveRoom instance.
+        # Passing the object results in query params containing the instance itself,
+        # which raises "Invalid variable type" errors during connection.
+        self.danmaku = live.LiveDanmaku(settings.room_id)
+        self.logger = logging.getLogger(__name__)
+
+    def _bind(self, event_name: str, handler: EventHandler) -> None:
+        try:
+            @self.danmaku.on(event_name)
+            async def _wrapped(event):
+                await handler(event)
+            self.logger.info("已绑定事件监听：%s", event_name)
+            return
+        except Exception:
+            pass
+
+        try:
+            self.danmaku.add_event_listener(event_name, handler)  # type: ignore
+            self.logger.info("已通过 add_event_listener 绑定事件：%s", event_name)
+        except Exception as exc:
+            raise RuntimeError(
+                f"无法绑定 LiveDanmaku 事件处理器（{event_name}），请检查 bilibili-api-python 版本的事件接口。"
+            ) from exc
 
     def bind_all_handler(self, handler: EventHandler) -> None:
-        # bilibili-api 的事件系统在不同版本可能有细微差异
-        # 主流用法是 @danmaku.on("ALL")
-        try:
-            @self.danmaku.on("ALL")
-            async def _on_all(event):
-                await handler(event)
-        except Exception:
-            # 兜底：如果装饰器不可用，尝试直接注册
-            try:
-                self.danmaku.add_event_listener("ALL", handler)  # type: ignore
-            except Exception:
-                raise RuntimeError("无法绑定 LiveDanmaku 事件处理器，请检查 bilibili-api-python 版本的事件接口。")
+        # 部分 bilibili-api 版本没有 "ALL" 事件，这里显式监听 SEND_GIFT，
+        # 并保留 ALL 以兼容老版本，避免礼物消息丢失。
+        self._bind("SEND_GIFT", handler)
+        self._bind("ALL", handler)
 
     async def run(self) -> None:
         await self.danmaku.connect()
