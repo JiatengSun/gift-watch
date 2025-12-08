@@ -43,3 +43,16 @@ def query_gifts_by_uname_and_gift(settings: Settings, uname: str, gift_name: str
             (uname, gift_name, limit)
         )
         return cur.fetchall()
+
+def query_recent_gifts(settings: Settings, limit: int = 200) -> List[Tuple]:
+    with get_conn(settings) as conn:
+        cur = conn.execute(
+            """
+            SELECT ts, uid, uname, gift_name, num, total_price
+            FROM gifts
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            (limit,)
+        )
+        return cur.fetchall()

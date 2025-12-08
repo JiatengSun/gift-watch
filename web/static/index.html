@@ -24,6 +24,14 @@
   <h3>结果</h3>
   <pre id="out">[]</pre>
 
+  <h3>所有礼物（最新）</h3>
+  <div class="row">
+    <input id="allLimit" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
+    <button id="btnLoadAll">刷新全部</button>
+  </div>
+  <div class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</div>
+  <pre id="allOut">[]</pre>
+
 <script>
 async function search() {
   const uname = document.getElementById("uname").value.trim();
@@ -40,7 +48,18 @@ async function search() {
   document.getElementById("out").textContent = JSON.stringify(data, null, 2);
 }
 
+async function loadAll() {
+  const limitInput = document.getElementById("allLimit");
+  const limit = parseInt(limitInput.value, 10) || 200;
+  const resp = await fetch(`/api/gifts?limit=${limit}`);
+  const data = await resp.json();
+  document.getElementById("allOut").textContent = JSON.stringify(data, null, 2);
+}
+
 document.getElementById("btnSearch").addEventListener("click", search);
+document.getElementById("btnLoadAll").addEventListener("click", loadAll);
+
+loadAll();
 </script>
 </body>
 </html>
