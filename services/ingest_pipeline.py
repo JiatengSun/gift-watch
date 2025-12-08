@@ -26,6 +26,10 @@ class IngestPipeline:
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
         cmd = event.get("cmd") or event.get("command")
+        if cmd and cmd != "SEND_GIFT":
+            return
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("收到事件 cmd=%s keys=%s", cmd, list(event.keys()))
         gift = parse_send_gift(event, room_id=self.settings.room_id)
         if gift is None:
             if cmd == "SEND_GIFT":
