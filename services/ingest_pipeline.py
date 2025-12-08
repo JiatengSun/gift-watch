@@ -25,8 +25,11 @@ class IngestPipeline:
         self.logger = logging.getLogger(__name__)
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
+        cmd = event.get("cmd") or event.get("command")
         gift = parse_send_gift(event, room_id=self.settings.room_id)
         if gift is None:
+            if cmd == "SEND_GIFT":
+                self.logger.warning("收到 SEND_GIFT 但无法解析，原始事件: %s", event)
             return
 
         insert_gift(self.settings, gift)
