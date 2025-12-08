@@ -8,10 +8,11 @@ from core.danmaku_sender import DanmakuSender
 from services.ingest_pipeline import IngestPipeline
 
 def build_pipeline(settings: Settings) -> IngestPipeline:
-    rule = build_rule(settings.target_gifts)
+    rule = build_rule(settings.target_gifts, settings.target_min_num)
     limiter = RateLimiter(
         global_cooldown_sec=settings.thank_global_cooldown_sec,
         per_user_cooldown_sec=settings.thank_per_user_cooldown_sec,
+        per_user_daily=settings.thank_per_user_daily,
     )
 
     sender = None

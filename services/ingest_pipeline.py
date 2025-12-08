@@ -35,7 +35,7 @@ class IngestPipeline:
         if not self.rule.hit(gift):
             return
 
-        if gift.uid and not self.limiter.allow(gift.uid):
+        if gift.uid and not self.limiter.allow(gift.uid, gift.ts):
             return
 
         await self.sender.send_thanks(gift.uname, gift.gift_name, gift.num)
