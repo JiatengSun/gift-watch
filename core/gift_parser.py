@@ -23,16 +23,31 @@ def parse_send_gift(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
     if cmd != "SEND_GIFT":
         return None
 
-    data = event.get("data") or {}
+    outer_data = event.get("data") or {}
+    inner_data = outer_data.get("data") if isinstance(outer_data, dict) else None
+    data = inner_data if isinstance(inner_data, dict) else outer_data
     try:
         uid = int(data.get("uid") or 0)
     except Exception:
         uid = 0
-    uname = str(data.get("uname") or "")
+    uname = str(data.get("uname") or data.get("name") or "")
 
-    gift_name = str(data.get("giftName") or data.get("gift_name") or "").strip()
+    gift_dict = data.get("gift") if isinstance(data.get("gift"), dict) else {}
+    gift_name = str(
+        data.get("giftName")
+        or data.get("gift_name")
+        or gift_dict.get("giftName")
+        or gift_dict.get("gift_name")
+        or ""
+    ).strip()
     try:
-        gift_id = int(data.get("giftId") or data.get("gift_id") or 0)
+        gift_id = int(
+            data.get("giftId")
+            or data.get("gift_id")
+            or gift_dict.get("giftId")
+            or gift_dict.get("gift_id")
+            or 0
+        )
     except Exception:
         gift_id = 0
 
@@ -53,7 +68,12 @@ def parse_send_gift(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
         except Exception:
             continue
 
-    ts = int(data.get("timestamp") or event.get("timestamp") or time.time())
+    ts = int(
+        data.get("timestamp")
+        or event.get("timestamp")
+        or outer_data.get("timestamp")
+        or time.time()
+    )
 
     raw_json = json.dumps(event, ensure_ascii=False)
 

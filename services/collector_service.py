@@ -12,7 +12,10 @@ class CollectorService:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.room = live.LiveRoom(room_display_id=settings.room_id)
-        self.danmaku = live.LiveDanmaku(self.room)
+        # LiveDanmaku expects the numeric room display id, not a LiveRoom instance.
+        # Passing the object results in query params containing the instance itself,
+        # which raises "Invalid variable type" errors during connection.
+        self.danmaku = live.LiveDanmaku(settings.room_id)
 
     def bind_all_handler(self, handler: EventHandler) -> None:
         # bilibili-api 的事件系统在不同版本可能有细微差异
