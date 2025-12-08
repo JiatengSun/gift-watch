@@ -40,7 +40,7 @@ copy .env.example .env
 ```
 
 至少需要：
-- `BILI_ROOM_ID`（默认指向 1852633038）
+- `BILI_ROOM_ID`
 - `TARGET_GIFTS`（默认监听“人气票”）
 - `TARGET_MIN_NUM`（默认 50，示例场景只感谢“50 张人气票”）
 - `THANK_PER_USER_DAILY`（默认 1，表示每个用户每天只感谢一次）
