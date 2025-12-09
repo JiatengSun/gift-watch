@@ -5,54 +5,358 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Gift Watch</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; }
-    input { padding: 8px 10px; min-width: 220px; }
-    button { padding: 8px 12px; cursor: pointer; }
-    pre { background: #111; color: #eee; padding: 12px; border-radius: 8px; overflow: auto; }
-    .hint { color: #666; font-size: 12px; margin-top: 6px; }
+    :root {
+      color-scheme: light dark;
+      --bg: #0b1220;
+      --card: #0f172a;
+      --muted: #94a3b8;
+      --primary: #38bdf8;
+      --border: #1e293b;
+      --text: #e2e8f0;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "Inter", "SF Pro", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.08), transparent 25%),
+        radial-gradient(circle at 80% 0%, rgba(94, 234, 212, 0.08), transparent 25%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 18px 48px;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 8px;
+      letter-spacing: 0.01em;
+    }
+
+    p { margin: 0; }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .hero-title {
+      font-size: 32px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.12);
+      color: #67e8f9;
+      font-size: 12px;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    label { font-weight: 600; }
+
+    input, button, select {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0b1324;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    input:focus, button:focus, select:focus {
+      outline: 2px solid rgba(56, 189, 248, 0.5);
+      outline-offset: 1px;
+    }
+
+    button {
+      background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+      border: none;
+      color: #0b1220;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    button:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(14, 165, 233, 0.35); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th { color: #cbd5e1; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+    tbody tr:nth-child(odd) td { background: rgba(255, 255, 255, 0.02); }
+
+    .number { font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .flex-between { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.15);
+      color: #e2e8f0;
+      font-size: 12px;
+    }
+
+    .empty { color: var(--muted); font-style: italic; margin-top: 6px; }
   </style>
 </head>
 <body>
-  <h2>Gift Watch</h2>
-  <div class="row">
-    <input id="uname" placeholder="用户名（精确匹配）" />
-    <input id="gift" placeholder="礼物名（可选）" />
-    <button id="btnSearch">搜索</button>
-  </div>
-  <div class="hint">数据来自本地数据库。若你在远程访问，请确保后端端口已正确转发。</div>
-  <h3>结果</h3>
-  <pre id="out">[]</pre>
+  <div class="page">
+    <div class="hero">
+      <div>
+        <div class="hero-title">Gift Watch <span class="pill">实时礼物监控</span></div>
+        <p class="hint">查询礼物记录、查看最新礼物流水，并实时获取房间可送礼物列表。</p>
+      </div>
+      <div class="badge">前端优化 · 合并重复礼物与用户</div>
+    </div>
 
-  <h3>所有礼物（最新）</h3>
-  <div class="row">
-    <input id="allLimit" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
-    <button id="btnLoadAll">刷新全部</button>
-  </div>
-  <div class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</div>
-  <pre id="allOut">[]</pre>
+    <div class="card-grid">
+      <div class="card">
+        <div class="section-header">
+          <h2>用户礼物查询</h2>
+          <span class="muted">支持按用户、礼物过滤并自动汇总</span>
+        </div>
+        <div class="row">
+          <input id="uname" placeholder="用户名（精确匹配）" />
+          <input id="gift" placeholder="礼物名（可选）" />
+          <input id="limit" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
+          <button id="btnSearch">搜索</button>
+        </div>
+        <p class="hint" style="margin-top:8px">会自动合并重复用户/礼物数量，便于直接看到汇总结果。</p>
+        <div id="searchSummary"></div>
+        <div id="searchAggregated"></div>
+        <div id="searchRaw"></div>
+      </div>
 
-  <h3>房间礼物清单（实时）</h3>
-  <div class="row">
-    <button id="btnLoadRoomGifts">刷新礼物清单</button>
+      <div class="card">
+        <div class="section-header">
+          <h2>最新礼物流水</h2>
+          <div class="row">
+            <input id="allLimit" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
+            <button id="btnLoadAll">刷新全部</button>
+          </div>
+        </div>
+        <p class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</p>
+        <div id="allOut"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-header">
+          <h2>房间礼物清单</h2>
+          <button id="btnLoadRoomGifts">刷新</button>
+        </div>
+        <p class="hint">直接来自 B 站接口，展示房间内可送出的礼物及其 ID / 价格。</p>
+        <div id="roomGiftsOut"></div>
+      </div>
+    </div>
   </div>
-  <div class="hint">直接来自 B 站接口，展示房间内可送出的礼物及其 ID/价格。</div>
-  <pre id="roomGiftsOut">[]</pre>
 
 <script>
+const fmtTime = (ts) => {
+  if (!ts) return "-";
+  const d = new Date(ts * 1000);
+  return d.toLocaleString();
+};
+
+const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
+
+const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
+  if (!rows.length) {
+    container.innerHTML = `<div class="empty">${emptyText}</div>`;
+    return;
+  }
+  const header = columns.map((c) => `<th>${c.label}</th>`).join("");
+  const body = rows
+    .map((row) =>
+      `<tr>${columns
+        .map((c) => `<td class="${c.className || ''}">${c.render ? c.render(row[c.key], row) : row[c.key]}</td>`)
+        .join("")}</tr>`
+    )
+    .join("");
+  container.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+};
+
+const groupByGift = (records) => {
+  const map = new Map();
+  records.forEach((r) => {
+    const key = r.gift_name || "(未知礼物)";
+    const current = map.get(key) || { gift_name: key, total_num: 0, total_price: 0, latest_ts: 0, users: new Set() };
+    current.total_num += Number(r.num) || 0;
+    current.total_price += Number(r.total_price) || 0;
+    current.latest_ts = Math.max(current.latest_ts, r.ts || 0);
+    if (r.uname) current.users.add(r.uname);
+    map.set(key, current);
+  });
+  return Array.from(map.values())
+    .map((v) => ({ ...v, user_count: v.users.size || 0 }))
+    .sort((a, b) => b.total_num - a.total_num || b.latest_ts - a.latest_ts);
+};
+
+const groupByUser = (records) => {
+  const map = new Map();
+  records.forEach((r) => {
+    const key = r.uname || `UID-${r.uid}`;
+    const current = map.get(key) || { uname: key, total_num: 0, total_price: 0, latest_ts: 0, gifts: new Set() };
+    current.total_num += Number(r.num) || 0;
+    current.total_price += Number(r.total_price) || 0;
+    current.latest_ts = Math.max(current.latest_ts, r.ts || 0);
+    if (r.gift_name) current.gifts.add(r.gift_name);
+    map.set(key, current);
+  });
+  return Array.from(map.values())
+    .map((v) => ({ ...v, gift_count: v.gifts.size || 0 }))
+    .sort((a, b) => b.total_num - a.total_num || b.latest_ts - a.latest_ts);
+};
+
+const renderSearch = (records) => {
+  const summary = document.getElementById("searchSummary");
+  const aggregated = document.getElementById("searchAggregated");
+  const raw = document.getElementById("searchRaw");
+
+  const totalNum = records.reduce((acc, r) => acc + (Number(r.num) || 0), 0);
+  const totalPrice = records.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
+  const latestTs = Math.max(0, ...records.map((r) => r.ts || 0));
+
+  summary.innerHTML = `
+    <div class="flex-between" style="margin:12px 0 6px;">
+      <div class="badge">记录数：${fmtNumber(records.length)}</div>
+      <div class="badge">总数量：${fmtNumber(totalNum)}</div>
+      <div class="badge">总金额：${fmtNumber(totalPrice)}</div>
+      <div class="badge">最新时间：${latestTs ? fmtTime(latestTs) : "-"}</div>
+    </div>
+  `;
+
+  const byGift = groupByGift(records);
+  const byUser = groupByUser(records);
+
+  aggregated.innerHTML = `<h3 style="margin-top:8px;">汇总视图</h3>`;
+  const giftContainer = document.createElement("div");
+  const userContainer = document.createElement("div");
+  aggregated.appendChild(giftContainer);
+  aggregated.appendChild(userContainer);
+
+  renderTable(
+    giftContainer,
+    byGift,
+    [
+      { key: "gift_name", label: "礼物" },
+      { key: "total_num", label: "数量合计", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+      { key: "user_count", label: "涉及用户", className: "number", render: (v) => fmtNumber(v) },
+      { key: "latest_ts", label: "最新时间", render: (v) => fmtTime(v) },
+    ],
+    "没有找到相关礼物"
+  );
+
+  userContainer.style.marginTop = "12px";
+  renderTable(
+    userContainer,
+    byUser,
+    [
+      { key: "uname", label: "用户" },
+      { key: "total_num", label: "礼物数量", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "合计金额", className: "number", render: (v) => fmtNumber(v) },
+      { key: "gift_count", label: "礼物种类", className: "number", render: (v) => fmtNumber(v) },
+      { key: "latest_ts", label: "最新时间", render: (v) => fmtTime(v) },
+    ],
+    "没有匹配的用户记录"
+  );
+
+  raw.innerHTML = `<h3 style="margin-top:12px;">原始记录</h3>`;
+  const rawContainer = document.createElement("div");
+  raw.appendChild(rawContainer);
+  renderTable(
+    rawContainer,
+    records,
+    [
+      { key: "ts", label: "时间", render: (v) => fmtTime(v) },
+      { key: "uname", label: "用户" },
+      { key: "gift_name", label: "礼物" },
+      { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+    ],
+    "暂无记录"
+  );
+};
+
 async function search() {
   const uname = document.getElementById("uname").value.trim();
   const gift = document.getElementById("gift").value.trim();
+  const limitInput = document.getElementById("limit");
+  const limit = parseInt(limitInput.value, 10) || 200;
+
   if (!uname) {
     alert("请输入用户名");
     return;
   }
   const url = gift
-    ? `/api/search?uname=${encodeURIComponent(uname)}&gift_name=${encodeURIComponent(gift)}`
-    : `/api/search?uname=${encodeURIComponent(uname)}`;
+    ? `/api/search?uname=${encodeURIComponent(uname)}&gift_name=${encodeURIComponent(gift)}&limit=${limit}`
+    : `/api/search?uname=${encodeURIComponent(uname)}&limit=${limit}`;
   const resp = await fetch(url);
   const data = await resp.json();
-  document.getElementById("out").textContent = JSON.stringify(data, null, 2);
+  renderSearch(data);
 }
 
 async function loadAll() {
@@ -60,21 +364,44 @@ async function loadAll() {
   const limit = parseInt(limitInput.value, 10) || 200;
   const resp = await fetch(`/api/gifts?limit=${limit}`);
   const data = await resp.json();
-  document.getElementById("allOut").textContent = JSON.stringify(data, null, 2);
+  const container = document.getElementById("allOut");
+  renderTable(
+    container,
+    data,
+    [
+      { key: "ts", label: "时间", render: (v) => fmtTime(v) },
+      { key: "uname", label: "用户" },
+      { key: "gift_name", label: "礼物" },
+      { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+    ],
+    "暂无礼物流水"
+  );
 }
 
 async function loadRoomGiftList() {
   const out = document.getElementById("roomGiftsOut");
-  out.textContent = "加载中...";
+  out.innerHTML = "<div class='muted'>加载中...</div>";
   try {
     const resp = await fetch("/api/room_gift_list");
     if (!resp.ok) {
       throw new Error(`HTTP ${resp.status}`);
     }
     const data = await resp.json();
-    out.textContent = JSON.stringify(data, null, 2);
+    renderTable(
+      out,
+      data,
+      [
+        { key: "gift_id", label: "礼物 ID", className: "number" },
+        { key: "name", label: "礼物名" },
+        { key: "price", label: "价格", className: "number", render: (v) => `${fmtNumber(v)} 金瓜子` },
+        { key: "coin_type", label: "币种" },
+        { key: "gift_type", label: "类型" },
+      ],
+      "暂无礼物信息"
+    );
   } catch (err) {
-    out.textContent = `加载失败：${err}`;
+    out.innerHTML = `<div class="empty">加载失败：${err}</div>`;
   }
 }
 
