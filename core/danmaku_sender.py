@@ -18,9 +18,6 @@ class DanmakuSender:
 
     async def send_thanks(self, uname: str, gift_name: str, num: int = 1) -> None:
         room = self._get_room()
-        msg = f"谢谢 {uname} 送的 {gift_name}"
-        if num and num > 1:
-            msg += f" x{num}"
-        msg += "！"
+        msg = f"谢谢 {uname} 送的 {gift_name} x{num}！"
         # send_danmaku 需要 Danmaku 对象而非纯文本
         await room.send_danmaku(live.Danmaku(msg))
