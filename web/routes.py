@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from config.settings import get_settings
-from db.repo import query_gifts_by_uname, query_gifts_by_uname_and_gift, query_recent_gifts
+from db.repo import (
+    delete_gift_by_id,
+    query_gift_by_id,
+    query_gifts_by_uname,
+    query_gifts_by_uname_and_gift,
+    query_recent_gifts,
+)
 from services.gift_list_service import fetch_room_gift_list
 
 router = APIRouter()
+
 
 def _default_start_ts(now: datetime) -> int:
     eight_am = datetime.combine(now.date(), time(8, 0))
@@ -38,12 +45,13 @@ def search(
 
     return [
         {
-            "ts": r[0],
-            "uid": r[1],
-            "uname": r[2],
-            "gift_name": r[3],
-            "num": r[4],
-            "total_price": r[5],
+            "id": r[0],
+            "ts": r[1],
+            "uid": r[2],
+            "uname": r[3],
+            "gift_name": r[4],
+            "num": r[5],
+            "total_price": r[6],
         }
         for r in rows
     ]
@@ -56,21 +64,50 @@ def list_gifts(limit: int = Query(200, ge=1, le=1000)):
 
     return [
         {
-            "ts": r[0],
-            "uid": r[1],
-            "uname": r[2],
-            "gift_name": r[3],
-            "num": r[4],
-            "total_price": r[5],
+            "id": r[0],
+            "ts": r[1],
+            "uid": r[2],
+            "uname": r[3],
+            "gift_name": r[4],
+            "num": r[5],
+            "total_price": r[6],
         }
         for r in rows
     ]
+
+
+@router.get("/api/gifts/{gift_id}")
+def get_gift(gift_id: int):
+    settings = get_settings()
+    row = query_gift_by_id(settings, gift_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    return {
+        "id": row[0],
+        "ts": row[1],
+        "uid": row[2],
+        "uname": row[3],
+        "gift_name": row[4],
+        "num": row[5],
+        "total_price": row[6],
+    }
+
+
+@router.delete("/api/gifts/{gift_id}")
+def delete_gift(gift_id: int):
+    settings = get_settings()
+    deleted = delete_gift_by_id(settings, gift_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="记录不存在或已删除")
+    return {"deleted": True, "id": gift_id}
 
 
 @router.get("/api/room_gift_list")
 def room_gift_list():
     settings = get_settings()
     return fetch_room_gift_list(settings)
+
 
 @router.get("/api/check")
 def check(
@@ -86,11 +123,12 @@ def check(
     return {
         "found": True,
         "latest": {
-            "ts": r[0],
-            "uid": r[1],
-            "uname": r[2],
-            "gift_name": r[3],
-            "num": r[4],
-            "total_price": r[5],
-        }
+            "id": r[0],
+            "ts": r[1],
+            "uid": r[2],
+            "uname": r[3],
+            "gift_name": r[4],
+            "num": r[5],
+            "total_price": r[6],
+        },
     }
