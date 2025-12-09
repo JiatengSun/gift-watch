@@ -28,8 +28,18 @@ class CollectorService:
 
     def log_room_status(self) -> None:
         url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={self.settings.room_id}"
+        headers = {
+            # B 站接口如果没有常见浏览器 UA 会返回 412，补充请求头提升成功率。
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/127.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://live.bilibili.com/",
+        }
         try:
-            with urllib.request.urlopen(url, timeout=5) as resp:
+            request = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(request, timeout=5) as resp:
                 payload = resp.read().decode("utf-8")
             data = json.loads(payload)
             if data.get("code") == 0 and isinstance(data.get("data"), dict):
