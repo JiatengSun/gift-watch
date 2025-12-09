@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -9,6 +11,9 @@ from web.routes import router
 
 app = FastAPI(title="gift-watch")
 
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+
 @app.on_event("startup")
 def _startup():
     settings = get_settings()
@@ -16,4 +21,10 @@ def _startup():
 
 app.include_router(router)
 
-app.mount("/", StaticFiles(directory="web/static", html=True), name="static")
+# Mount the static frontend with HTML fallback so "/" and any client-side
+# routes serve the index page instead of a 404 (e.g., when proxied by nginx).
+app.mount(
+    "/",
+    StaticFiles(directory=STATIC_DIR, html=True),
+    name="static",
+)
