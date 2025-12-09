@@ -58,9 +58,22 @@ def search(
 
 
 @router.get("/api/gifts")
-def list_gifts(limit: int = Query(200, ge=1, le=1000)):
+def list_gifts(
+    limit: int = Query(200, ge=1, le=1000),
+    start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
+    end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
+    uname: str | None = Query(None, description="用户名"),
+    gift_name: str | None = Query(None, description="礼物名"),
+):
     settings = get_settings()
-    rows = query_recent_gifts(settings, limit=limit)
+    rows = query_recent_gifts(
+        settings,
+        limit=limit,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        uname=uname,
+        gift_name=gift_name,
+    )
 
     return [
         {

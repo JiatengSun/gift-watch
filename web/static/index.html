@@ -184,6 +184,39 @@
       background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(8, 15, 32, 0.9));
     }
 
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin: 10px 0 4px;
+      align-items: center;
+    }
+
+    .filter-grid label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    .filter-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .ghost-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
     .console-log {
       background: #0a1020;
       border: 1px solid var(--border);
@@ -333,15 +366,25 @@
       <div class="card console-card">
         <div class="section-header">
           <h2>控制台</h2>
-          <span class="muted">快速查看 / 删除指定送礼记录</span>
+          <span class="muted" id="consoleSummary">按条件筛选并快捷操作流水</span>
         </div>
-        <div class="row">
-          <input id="consoleRecordId" type="number" min="1" placeholder="记录 ID" aria-label="记录 ID" />
-          <button id="btnInspectRecord">查看记录</button>
+        <div class="filter-grid">
+          <label>开始时间<input id="consoleStart" type="datetime-local" aria-label="开始时间" /></label>
+          <label>结束时间<input id="consoleEnd" type="datetime-local" aria-label="结束时间" /></label>
+          <label>用户名（可选）<input id="consoleUname" placeholder="精确匹配" /></label>
+          <label>礼物名（可选）<input id="consoleGift" placeholder="精确匹配" /></label>
+          <label>条数限制<input id="consoleLimit" type="number" min="1" max="1000" value="200" aria-label="返回条数" /></label>
+          <label>记录 ID（用于单独操作）<input id="consoleRecordId" type="number" min="1" placeholder="记录 ID" aria-label="记录 ID" /></label>
+        </div>
+        <div class="filter-actions">
+          <button id="btnConsoleFilter">筛选流水</button>
+          <button id="btnConsoleReset" class="ghost-btn">重置时间</button>
+          <button id="btnInspectRecord" class="ghost-btn">查看记录</button>
           <button id="btnDeleteRecord" style="background:linear-gradient(135deg,#f472b6,#ec4899);">删除记录</button>
         </div>
-        <p class="hint" style="margin:8px 0;">可先在“最新礼物流水”中查看 ID，然后在此删除；删除成功后将自动刷新当前视图。</p>
-        <div id="consoleLog" class="console-log" aria-live="polite"></div>
+        <p class="hint" style="margin:8px 0;">下方列表支持直接操作，默认查看从今日 8 点至今的流水，可按需缩小时间范围。</p>
+        <div id="consoleList"></div>
+        <div id="consoleLog" class="console-log" aria-live="polite" style="margin-top:12px;"></div>
       </div>
     </div>
 
@@ -411,6 +454,8 @@ const defaultStartDate = () => {
   }
   return start;
 };
+
+const nowDateTime = () => new Date();
 
 const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
   if (!rows.length) {
@@ -570,6 +615,41 @@ const renderSearch = (records, targets) => {
   );
 };
 
+const renderConsoleRecords = (records) => {
+  const container = document.getElementById("consoleList");
+  renderTable(
+    container,
+    records,
+    [
+      { key: "id", label: "ID", className: "number" },
+      { key: "ts", label: "时间", render: (v) => fmtTime(v) },
+      { key: "uname", label: "用户" },
+      { key: "gift_name", label: "礼物" },
+      { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
+      {
+        key: "actions",
+        label: "操作",
+        render: (_, row) =>
+          `<div class="row" style="gap:6px;">` +
+          `<button class="ghost-btn" data-inspect-id="${row.id}">查看</button>` +
+          `<button class="ghost-btn" data-delete-id="${row.id}" style="border-color:#f472b6;color:#f472b6;">删除</button>` +
+          `</div>`,
+      },
+    ],
+    "暂无流水（可调整筛选条件）"
+  );
+
+  container.querySelectorAll("[data-inspect-id]").forEach((btn) => {
+    btn.addEventListener("click", () => inspectRecord(Number(btn.dataset.inspectId)));
+  });
+  container.querySelectorAll("[data-delete-id]").forEach((btn) => {
+    btn.addEventListener("click", () => deleteRecord(Number(btn.dataset.deleteId)));
+  });
+
+  updateConsoleSummary(records);
+};
+
 const getInputValue = (id) => document.getElementById(id)?.value.trim();
 
 const setDefaultStartTime = (id) => {
@@ -577,6 +657,19 @@ const setDefaultStartTime = (id) => {
   if (!el) return;
   const start = defaultStartDate();
   el.value = start.toISOString().slice(0, 16);
+};
+
+const setNowTime = (id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = nowDateTime().toISOString().slice(0, 16);
+};
+
+const getDateInputSeconds = (id) => {
+  const el = document.getElementById(id);
+  if (!el || !el.value) return undefined;
+  const parsed = Math.floor(new Date(el.value).getTime() / 1000);
+  return Number.isNaN(parsed) ? undefined : parsed;
 };
 
 const updateTotalFlow = (records) => {
@@ -591,6 +684,18 @@ const updateTotalFlow = (records) => {
   metaEl.textContent = `记录：${fmtNumber(records.length)} ｜ 数量：${fmtNumber(totalNum)}`;
 };
 
+const updateConsoleSummary = (records) => {
+  const el = document.getElementById("consoleSummary");
+  if (!el) return;
+  if (!records.length) {
+    el.textContent = "未找到流水，请调整时间或过滤条件";
+    return;
+  }
+  const totalPrice = records.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
+  const totalNum = records.reduce((acc, r) => acc + (Number(r.num) || 0), 0);
+  el.textContent = `筛选到 ${fmtNumber(records.length)} 条，数量 ${fmtNumber(totalNum)}，金额 ¥${fmtCurrency(totalPrice)}`;
+};
+
 const getConsoleRecordId = () => {
   const input = document.getElementById("consoleRecordId");
   if (!input) return null;
@@ -602,8 +707,8 @@ const getConsoleRecordId = () => {
   return val;
 };
 
-const inspectRecord = async () => {
-  const id = getConsoleRecordId();
+const inspectRecord = async (overrideId) => {
+  const id = overrideId || getConsoleRecordId();
   if (!id) return;
   try {
     const resp = await fetch(`/api/gifts/${id}`);
@@ -622,8 +727,8 @@ const inspectRecord = async () => {
   }
 };
 
-const deleteRecord = async () => {
-  const id = getConsoleRecordId();
+const deleteRecord = async (overrideId) => {
+  const id = overrideId || getConsoleRecordId();
   if (!id) return;
   const confirmed = confirm(`确认删除记录 ${id} 吗？此操作不可恢复。`);
   if (!confirmed) return;
@@ -634,7 +739,11 @@ const deleteRecord = async () => {
       throw new Error(errorText || `HTTP ${resp.status}`);
     }
     logConsole(`已删除记录 ${id}，正在刷新列表...`, "success");
-    loadAll(activeView);
+    if (activeView === "console") {
+      loadConsoleRecords();
+    } else {
+      loadAll(activeView);
+    }
   } catch (err) {
     logConsole(`删除失败：${err.message || err}`, "error");
   }
@@ -664,6 +773,45 @@ async function search(viewKey) {
   const data = await resp.json();
   renderSearch(data, cfg.search.outputs);
 }
+
+const buildConsoleParams = () => {
+  const params = new URLSearchParams();
+  const limit = parseInt(document.getElementById("consoleLimit")?.value || "0", 10) || 200;
+  params.set("limit", String(limit));
+
+  const start = getDateInputSeconds("consoleStart");
+  const end = getDateInputSeconds("consoleEnd");
+  const uname = getInputValue("consoleUname");
+  const gift = getInputValue("consoleGift");
+
+  if (start) params.set("start_ts", String(start));
+  if (end) params.set("end_ts", String(end));
+  if (uname) params.set("uname", uname);
+  if (gift) params.set("gift_name", gift);
+
+  return params;
+};
+
+const loadConsoleRecords = async () => {
+  logConsole("正在加载筛选后的流水...", "info");
+  const params = buildConsoleParams();
+  const resp = await fetch(`/api/gifts?${params.toString()}`);
+  const data = await resp.json();
+  renderConsoleRecords(data);
+  updateTotalFlow(data);
+  viewState.console.loadedAll = true;
+};
+
+const resetConsoleFilters = () => {
+  setDefaultStartTime("consoleStart");
+  setNowTime("consoleEnd");
+  const optionalIds = ["consoleUname", "consoleGift", "consoleRecordId"];
+  optionalIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  document.getElementById("consoleLimit").value = "200";
+};
 
 async function loadAll(viewKey) {
   const cfg = viewConfigs[viewKey];
@@ -718,15 +866,27 @@ async function loadRoomGiftList() {
 
 const initView = (viewKey) => {
   const cfg = viewConfigs[viewKey];
-  if (cfg.search) {
-    setDefaultStartTime(cfg.search.inputs.start);
-    document.getElementById(cfg.search.button)?.addEventListener("click", () => search(viewKey));
-  }
-  if (cfg.latest) {
-    document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey));
-  }
-  if (cfg.roomGifts) {
-    document.getElementById(cfg.roomGifts.button)?.addEventListener("click", loadRoomGiftList);
+  if (viewKey === "console") {
+    resetConsoleFilters();
+    document.getElementById("btnConsoleFilter")?.addEventListener("click", loadConsoleRecords);
+    document.getElementById("btnConsoleReset")?.addEventListener("click", () => {
+      resetConsoleFilters();
+      loadConsoleRecords();
+    });
+    document.getElementById("btnInspectRecord")?.addEventListener("click", () => inspectRecord());
+    document.getElementById("btnDeleteRecord")?.addEventListener("click", () => deleteRecord());
+    logConsole("控制台已就绪，可筛选或直接输入记录 ID 操作。", "info");
+  } else {
+    if (cfg.search) {
+      setDefaultStartTime(cfg.search.inputs.start);
+      document.getElementById(cfg.search.button)?.addEventListener("click", () => search(viewKey));
+    }
+    if (cfg.latest) {
+      document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey));
+    }
+    if (cfg.roomGifts) {
+      document.getElementById(cfg.roomGifts.button)?.addEventListener("click", loadRoomGiftList);
+    }
   }
   viewState[viewKey].initialized = true;
 };
@@ -751,15 +911,14 @@ const switchView = (target) => {
   if (target === "desktop" && !viewState.desktop.roomLoaded) {
     loadRoomGiftList();
   }
+  if (target === "console" && !viewState.console.loadedAll) {
+    loadConsoleRecords();
+  }
 };
 
 document.querySelectorAll("[data-view-target]").forEach((btn) => {
   btn.addEventListener("click", () => switchView(btn.dataset.viewTarget));
 });
-
-document.getElementById("btnInspectRecord")?.addEventListener("click", inspectRecord);
-document.getElementById("btnDeleteRecord")?.addEventListener("click", deleteRecord);
-logConsole("控制台已就绪，可输入记录 ID 查看或删除。", "info");
 
 initView("desktop");
 switchView("desktop");

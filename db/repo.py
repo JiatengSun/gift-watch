@@ -75,16 +75,44 @@ def query_gifts_by_uname_and_gift(
         return cur.fetchall()
 
 
-def query_recent_gifts(settings: Settings, limit: int = 200) -> List[Tuple]:
+def query_recent_gifts(
+    settings: Settings,
+    limit: int = 200,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    uname: str | None = None,
+    gift_name: str | None = None,
+) -> List[Tuple]:
+    clauses = []
+    params: list[object] = []
+
+    if start_ts is not None:
+        clauses.append("ts >= ?")
+        params.append(start_ts)
+    if end_ts is not None:
+        clauses.append("ts <= ?")
+        params.append(end_ts)
+    if uname:
+        clauses.append("uname = ?")
+        params.append(uname)
+    if gift_name:
+        clauses.append("gift_name = ?")
+        params.append(gift_name)
+
+    where = ""
+    if clauses:
+        where = "WHERE " + " AND ".join(clauses)
+
     with get_conn(settings) as conn:
         cur = conn.execute(
-            """
+            f"""
             SELECT id, ts, uid, uname, gift_name, num, total_price
             FROM gifts
+            {where}
             ORDER BY ts DESC
             LIMIT ?
             """,
-            (limit,),
+            (*params, limit),
         )
         return cur.fetchall()
 
