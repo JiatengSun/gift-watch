@@ -75,6 +75,19 @@
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
     }
 
+    .metric-card {
+      margin-bottom: 16px;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .metric-value {
+      font-size: 36px;
+      font-weight: 800;
+      margin-top: 8px;
+      color: #67e8f9;
+      letter-spacing: 0.02em;
+    }
+
     .section-header {
       display: flex;
       align-items: center;
@@ -198,6 +211,17 @@
         <button class="toggle-btn" data-view-target="mobile">手机专用</button>
         <button class="toggle-btn" data-view-target="tablet">平板专用</button>
       </div>
+    </div>
+
+    <div class="card metric-card">
+      <div class="flex-between" style="gap:8px; align-items: flex-end;">
+        <div>
+          <h2 style="margin-bottom:4px;">总流水</h2>
+          <p class="hint">基于当前加载的“最新礼物流水”列表实时计算，单位为元。</p>
+        </div>
+        <div class="badge" id="totalFlowMeta">记录：- ｜ 数量：-</div>
+      </div>
+      <div class="metric-value" id="totalFlowValue">-</div>
     </div>
 
     <!-- 桌面版：原有布局，包含房间礼物清单 -->
@@ -496,6 +520,18 @@ const setDefaultStartTime = (id) => {
   el.value = start.toISOString().slice(0, 16);
 };
 
+const updateTotalFlow = (records) => {
+  const valueEl = document.getElementById("totalFlowValue");
+  const metaEl = document.getElementById("totalFlowMeta");
+  if (!valueEl || !metaEl) return;
+
+  const totalPrice = records.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
+  const totalNum = records.reduce((acc, r) => acc + (Number(r.num) || 0), 0);
+
+  valueEl.textContent = `¥${fmtCurrency(totalPrice)}`;
+  metaEl.textContent = `记录：${fmtNumber(records.length)} ｜ 数量：${fmtNumber(totalNum)}`;
+};
+
 async function search(viewKey) {
   const cfg = viewConfigs[viewKey];
   const inputs = cfg.search.inputs;
@@ -540,6 +576,7 @@ async function loadAll(viewKey) {
     ],
     "暂无礼物流水"
   );
+  updateTotalFlow(data);
   viewState[viewKey].loadedAll = true;
 }
 
