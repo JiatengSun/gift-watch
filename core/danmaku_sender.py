@@ -22,5 +22,5 @@ class DanmakuSender:
         if num and num > 1:
             msg += f" x{num}"
         msg += "！"
-        # 具体方法名可能随版本变化，如遇 AttributeError 请按文档/IDE 提示调整
-        await room.send_danmaku(msg)
+        # send_danmaku 需要 Danmaku 对象而非纯文本
+        await room.send_danmaku(live.Danmaku(msg))
