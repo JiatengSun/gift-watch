@@ -35,19 +35,9 @@
 
     p { margin: 0; }
 
-    .page {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
+    .page { max-width: 1280px; margin: 0 auto; }
 
-    .hero {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
+    .hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 
     .hero-title {
       font-size: 32px;
@@ -73,11 +63,9 @@
       font-size: 13px;
     }
 
-    .card-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 16px;
-    }
+    .top-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-bottom: 16px; }
+
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
 
     .card {
       background: var(--card);
@@ -125,26 +113,16 @@
 
     button:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(14, 165, 233, 0.35); }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      border-spacing: 0;
-      margin-top: 8px;
-      font-size: 14px;
-    }
+    .table-scroll { overflow-x: auto; margin-top: 8px; }
 
-    th, td {
-      padding: 10px 8px;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-      vertical-align: middle;
-      white-space: nowrap;
-    }
+    table { width: 100%; border-collapse: collapse; border-spacing: 0; margin-top: 0; font-size: 14px; min-width: 500px; }
+
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; white-space: normal; word-break: break-word; }
 
     th { color: #cbd5e1; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
     tbody tr:nth-child(odd) td { background: rgba(255, 255, 255, 0.02); }
 
-    .number { font-variant-numeric: tabular-nums; }
+    .number { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .muted { color: var(--muted); }
     .flex-between { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 
@@ -172,7 +150,7 @@
       <div class="badge">前端优化 · 合并重复礼物与用户</div>
     </div>
 
-    <div class="card-grid">
+    <div class="top-grid">
       <div class="card">
         <div class="section-header">
           <h2>用户礼物查询</h2>
@@ -201,15 +179,15 @@
         <p class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</p>
         <div id="allOut"></div>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="section-header">
-          <h2>房间礼物清单</h2>
-          <button id="btnLoadRoomGifts">刷新</button>
-        </div>
-        <p class="hint">直接来自 B 站接口，展示房间内可送出的礼物及其 ID / 价格。</p>
-        <div id="roomGiftsOut"></div>
+    <div class="card">
+      <div class="section-header">
+        <h2>房间礼物清单</h2>
+        <button id="btnLoadRoomGifts">刷新</button>
       </div>
+      <p class="hint">直接来自 B 站接口，展示房间内可送出的礼物及其 ID / 价格。</p>
+      <div id="roomGiftsOut"></div>
     </div>
   </div>
 
@@ -235,7 +213,7 @@ const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
         .join("")}</tr>`
     )
     .join("");
-  container.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+  container.innerHTML = `<div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
 };
 
 const groupByGift = (records) => {
