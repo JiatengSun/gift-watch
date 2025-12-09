@@ -159,10 +159,11 @@
         <div class="row">
           <input id="uname" placeholder="用户名（精确匹配）" />
           <input id="gift" placeholder="礼物名（可选）" />
+          <input id="startTime" type="datetime-local" aria-label="开始时间" />
           <input id="limit" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
           <button id="btnSearch">搜索</button>
         </div>
-        <p class="hint" style="margin-top:8px">会自动合并重复用户/礼物数量，便于直接看到汇总结果。</p>
+        <p class="hint" style="margin-top:8px">会自动合并重复用户/礼物数量，默认从早上 8 点开始查询，截止到点击搜索的当前时间。</p>
         <div id="searchSummary"></div>
         <div id="searchAggregated"></div>
         <div id="searchRaw"></div>
@@ -199,6 +200,16 @@ const fmtTime = (ts) => {
 };
 
 const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
+
+const defaultStartDate = () => {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(8, 0, 0, 0);
+  if (start > now) {
+    start.setDate(start.getDate() - 1);
+  }
+  return start;
+};
 
 const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
   if (!rows.length) {
@@ -324,15 +335,21 @@ async function search() {
   const gift = document.getElementById("gift").value.trim();
   const limitInput = document.getElementById("limit");
   const limit = parseInt(limitInput.value, 10) || 200;
+  const startInput = document.getElementById("startTime");
+  const startValue = startInput.value;
+  const parsedStart = startValue ? Math.floor(new Date(startValue).getTime() / 1000) : NaN;
+  const start_ts = Number.isNaN(parsedStart) ? undefined : parsedStart;
 
   if (!uname) {
     alert("请输入用户名");
     return;
   }
-  const url = gift
-    ? `/api/search?uname=${encodeURIComponent(uname)}&gift_name=${encodeURIComponent(gift)}&limit=${limit}`
-    : `/api/search?uname=${encodeURIComponent(uname)}&limit=${limit}`;
-  const resp = await fetch(url);
+
+  const params = new URLSearchParams({ uname, limit: String(limit) });
+  if (gift) params.set("gift_name", gift);
+  if (start_ts) params.set("start_ts", String(start_ts));
+
+  const resp = await fetch(`/api/search?${params.toString()}`);
   const data = await resp.json();
   renderSearch(data);
 }
@@ -383,10 +400,17 @@ async function loadRoomGiftList() {
   }
 }
 
+const startTimeInput = document.getElementById("startTime");
+const setDefaultStartTime = () => {
+  const start = defaultStartDate();
+  startTimeInput.value = start.toISOString().slice(0, 16);
+};
+
 document.getElementById("btnSearch").addEventListener("click", search);
 document.getElementById("btnLoadAll").addEventListener("click", loadAll);
 document.getElementById("btnLoadRoomGifts").addEventListener("click", loadRoomGiftList);
 
+setDefaultStartTime();
 loadAll();
 loadRoomGiftList();
 </script>
