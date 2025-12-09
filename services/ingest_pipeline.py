@@ -67,7 +67,9 @@ class IngestPipeline:
         if not self.rule.hit(gift):
             return
 
-        if gift.uid and not self.limiter.allow(gift.uid, gift.ts):
+        # COMBO_SEND 会频繁触发多次事件，如果套用全局/用户冷却会导致只有第一条连击礼物被回复。
+        # 对于连击，直接跳过冷却限制，保证每个连击包裹都能即时致谢。
+        if cmd != "COMBO_SEND" and gift.uid and not self.limiter.allow(gift.uid, gift.ts):
             return
 
         await self.sender.send_thanks(gift.uname, gift.gift_name, gift.num)
