@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta
+
 from fastapi import APIRouter, Query
 
 from config.settings import get_settings
@@ -8,18 +10,31 @@ from services.gift_list_service import fetch_room_gift_list
 
 router = APIRouter()
 
+def _default_start_ts(now: datetime) -> int:
+    eight_am = datetime.combine(now.date(), time(8, 0))
+    if eight_am > now:
+        eight_am = eight_am - timedelta(days=1)
+    return int(eight_am.timestamp())
+
+
 @router.get("/api/search")
 def search(
     uname: str = Query(..., description="用户名"),
     gift_name: str | None = Query(None, description="礼物名"),
     limit: int = Query(200, ge=1, le=1000),
+    start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
 ):
     settings = get_settings()
+    now = datetime.now()
+    effective_start_ts = start_ts if start_ts is not None else _default_start_ts(now)
+    end_ts = int(now.timestamp())
 
     if gift_name:
-        rows = query_gifts_by_uname_and_gift(settings, uname=uname, gift_name=gift_name, limit=limit)
+        rows = query_gifts_by_uname_and_gift(
+            settings, uname=uname, gift_name=gift_name, limit=limit, start_ts=effective_start_ts, end_ts=end_ts
+        )
     else:
-        rows = query_gifts_by_uname(settings, uname=uname, limit=limit)
+        rows = query_gifts_by_uname(settings, uname=uname, limit=limit, start_ts=effective_start_ts, end_ts=end_ts)
 
     return [
         {
