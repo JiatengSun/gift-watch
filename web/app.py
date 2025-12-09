@@ -14,7 +14,6 @@ app = FastAPI(title="gift-watch")
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
-INDEX_FILE = STATIC_DIR / "index.html"
 
 @app.on_event("startup")
 def _startup():
@@ -23,9 +22,10 @@ def _startup():
 
 app.include_router(router)
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-
-@app.get("/")
-def read_index():
-    return FileResponse(INDEX_FILE)
+# Mount the static frontend with HTML fallback so "/" and any client-side
+# routes serve the index page instead of a 404 (e.g., when proxied by nginx).
+app.mount(
+    "/",
+    StaticFiles(directory=STATIC_DIR, html=True),
+    name="static",
+)
