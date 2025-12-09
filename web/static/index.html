@@ -138,6 +138,52 @@
     }
 
     .empty { color: var(--muted); font-style: italic; margin-top: 6px; }
+
+    .view-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+
+    .toggle-btn.active { border-color: var(--primary); background: rgba(56, 189, 248, 0.12); color: #67e8f9; }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .mobile-layout .row,
+    .tablet-layout .row {
+      width: 100%;
+      gap: 8px;
+    }
+
+    .mobile-layout input,
+    .mobile-layout button,
+    .mobile-layout select {
+      width: 100%;
+    }
+
+    .tablet-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .hero-title { font-size: 24px; }
+      .top-grid { grid-template-columns: 1fr; }
+      .page { padding: 0 4px; }
+    }
   </style>
 </head>
 <body>
@@ -145,50 +191,125 @@
     <div class="hero">
       <div>
         <div class="hero-title">Gift Watch <span class="pill">实时礼物监控</span></div>
-        <p class="hint">查询礼物记录、查看最新礼物流水，并实时获取房间可送礼物列表。</p>
+        <p class="hint">桌面版保留全部功能，手机 / 平板版仅保留搜索与全部清单，方便触摸操作。金额已按电池价值折算（1 电池=¥0.1）。</p>
       </div>
-      <div class="badge">前端优化 · 合并重复礼物与用户</div>
+      <div class="view-toggle" aria-label="界面切换">
+        <button class="toggle-btn active" data-view-target="desktop">桌面版</button>
+        <button class="toggle-btn" data-view-target="mobile">手机专用</button>
+        <button class="toggle-btn" data-view-target="tablet">平板专用</button>
+      </div>
     </div>
 
-    <div class="top-grid">
+    <!-- 桌面版：原有布局，包含房间礼物清单 -->
+    <div id="view-desktop" class="view active">
+      <div class="top-grid">
+        <div class="card">
+          <div class="section-header">
+            <h2>用户礼物查询</h2>
+            <span class="muted">支持按用户、礼物过滤并自动汇总</span>
+          </div>
+          <div class="row">
+            <input id="uname-desktop" placeholder="用户名（精确匹配）" />
+            <input id="gift-desktop" placeholder="礼物名（可选）" />
+            <input id="startTime-desktop" type="datetime-local" aria-label="开始时间" />
+            <input id="limit-desktop" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
+            <button id="btnSearch-desktop">搜索</button>
+          </div>
+          <p class="hint" style="margin-top:8px">会自动合并重复用户/礼物数量，默认从早上 8 点开始查询，截止到点击搜索的当前时间。</p>
+          <div id="searchSummary-desktop"></div>
+          <div id="searchAggregated-desktop"></div>
+          <div id="searchRaw-desktop"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-header">
+            <h2>最新礼物流水</h2>
+            <div class="row">
+              <input id="allLimit-desktop" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
+              <button id="btnLoadAll-desktop">刷新全部</button>
+            </div>
+          </div>
+          <p class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</p>
+          <div id="allOut-desktop"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="section-header">
-          <h2>用户礼物查询</h2>
-          <span class="muted">支持按用户、礼物过滤并自动汇总</span>
+          <h2>房间礼物清单</h2>
+          <button id="btnLoadRoomGifts">刷新</button>
+        </div>
+        <p class="hint">直接来自 B 站接口，展示房间内可送出的礼物及其 ID / 价格。</p>
+        <div id="roomGiftsOut"></div>
+      </div>
+    </div>
+
+    <!-- 手机版：仅保留搜索 & 全部清单，单列布局 -->
+    <div id="view-mobile" class="view mobile-layout">
+      <div class="card" style="margin-bottom:12px;">
+        <div class="section-header">
+          <h2>快速搜索</h2>
+          <span class="muted">为手机触摸优化</span>
         </div>
         <div class="row">
-          <input id="uname" placeholder="用户名（精确匹配）" />
-          <input id="gift" placeholder="礼物名（可选）" />
-          <input id="startTime" type="datetime-local" aria-label="开始时间" />
-          <input id="limit" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
-          <button id="btnSearch">搜索</button>
+          <input id="uname-mobile" placeholder="用户名（精确匹配）" />
+          <input id="gift-mobile" placeholder="礼物名（可选）" />
+          <input id="startTime-mobile" type="datetime-local" aria-label="开始时间" />
+          <input id="limit-mobile" type="number" min="1" max="500" value="150" aria-label="返回条数" />
+          <button id="btnSearch-mobile">搜索</button>
         </div>
-        <p class="hint" style="margin-top:8px">会自动合并重复用户/礼物数量，默认从早上 8 点开始查询，截止到点击搜索的当前时间。</p>
-        <div id="searchSummary"></div>
-        <div id="searchAggregated"></div>
-        <div id="searchRaw"></div>
+        <p class="hint" style="margin-top:8px">默认从今日 8 点开始查询，已为窄屏做压缩展示。</p>
+        <div id="searchSummary-mobile"></div>
+        <div id="searchAggregated-mobile"></div>
+        <div id="searchRaw-mobile"></div>
       </div>
 
       <div class="card">
         <div class="section-header">
-          <h2>最新礼物流水</h2>
+          <h2>全部礼物流水</h2>
           <div class="row">
-            <input id="allLimit" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
-            <button id="btnLoadAll">刷新全部</button>
+            <input id="allLimit-mobile" type="number" min="1" max="800" value="150" aria-label="返回条数" />
+            <button id="btnLoadAll-mobile">刷新</button>
           </div>
         </div>
-        <p class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</p>
-        <div id="allOut"></div>
+        <p class="hint">表格可左右滑动查看全部字段。</p>
+        <div id="allOut-mobile"></div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="section-header">
-        <h2>房间礼物清单</h2>
-        <button id="btnLoadRoomGifts">刷新</button>
+    <!-- 平板版：两列布局，无房间礼物清单 -->
+    <div id="view-tablet" class="view tablet-layout">
+      <div class="tablet-grid">
+        <div class="card">
+          <div class="section-header">
+            <h2>平板搜索</h2>
+            <span class="muted">保持信息密度</span>
+          </div>
+          <div class="row">
+            <input id="uname-tablet" placeholder="用户名（精确匹配）" />
+            <input id="gift-tablet" placeholder="礼物名（可选）" />
+            <input id="startTime-tablet" type="datetime-local" aria-label="开始时间" />
+            <input id="limit-tablet" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
+            <button id="btnSearch-tablet">搜索</button>
+          </div>
+          <p class="hint" style="margin-top:8px">保留桌面级的汇总表格，去除房间礼物清单，方便分屏。</p>
+          <div id="searchSummary-tablet"></div>
+          <div id="searchAggregated-tablet"></div>
+          <div id="searchRaw-tablet"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-header">
+            <h2>最新流水</h2>
+            <div class="row">
+              <input id="allLimit-tablet" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
+              <button id="btnLoadAll-tablet">刷新</button>
+            </div>
+          </div>
+          <p class="hint">适配横屏 / 竖屏，支持左右滑动。</p>
+          <div id="allOut-tablet"></div>
+        </div>
       </div>
-      <p class="hint">直接来自 B 站接口，展示房间内可送出的礼物及其 ID / 价格。</p>
-      <div id="roomGiftsOut"></div>
     </div>
   </div>
 
@@ -200,6 +321,9 @@ const fmtTime = (ts) => {
 };
 
 const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
+const coinsToYuan = (coins) => (Number(coins) || 0) / 1000;
+const fmtCurrency = (coins) =>
+  new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(coinsToYuan(coins));
 
 const defaultStartDate = () => {
   const now = new Date();
@@ -259,10 +383,43 @@ const groupByUser = (records) => {
     .sort((a, b) => b.total_num - a.total_num || b.latest_ts - a.latest_ts);
 };
 
-const renderSearch = (records) => {
-  const summary = document.getElementById("searchSummary");
-  const aggregated = document.getElementById("searchAggregated");
-  const raw = document.getElementById("searchRaw");
+const viewConfigs = {
+  desktop: {
+    root: document.getElementById("view-desktop"),
+    search: {
+      button: "btnSearch-desktop",
+      inputs: { uname: "uname-desktop", gift: "gift-desktop", start: "startTime-desktop", limit: "limit-desktop" },
+      outputs: { summary: "searchSummary-desktop", aggregated: "searchAggregated-desktop", raw: "searchRaw-desktop" },
+    },
+    latest: { button: "btnLoadAll-desktop", limit: "allLimit-desktop", output: "allOut-desktop" },
+    roomGifts: { button: "btnLoadRoomGifts", output: "roomGiftsOut" },
+  },
+  mobile: {
+    root: document.getElementById("view-mobile"),
+    search: {
+      button: "btnSearch-mobile",
+      inputs: { uname: "uname-mobile", gift: "gift-mobile", start: "startTime-mobile", limit: "limit-mobile" },
+      outputs: { summary: "searchSummary-mobile", aggregated: "searchAggregated-mobile", raw: "searchRaw-mobile" },
+    },
+    latest: { button: "btnLoadAll-mobile", limit: "allLimit-mobile", output: "allOut-mobile" },
+  },
+  tablet: {
+    root: document.getElementById("view-tablet"),
+    search: {
+      button: "btnSearch-tablet",
+      inputs: { uname: "uname-tablet", gift: "gift-tablet", start: "startTime-tablet", limit: "limit-tablet" },
+      outputs: { summary: "searchSummary-tablet", aggregated: "searchAggregated-tablet", raw: "searchRaw-tablet" },
+    },
+    latest: { button: "btnLoadAll-tablet", limit: "allLimit-tablet", output: "allOut-tablet" },
+  },
+};
+
+const viewState = Object.fromEntries(Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false }]));
+
+const renderSearch = (records, targets) => {
+  const summary = document.getElementById(targets.summary);
+  const aggregated = document.getElementById(targets.aggregated);
+  const raw = document.getElementById(targets.raw);
 
   const totalNum = records.reduce((acc, r) => acc + (Number(r.num) || 0), 0);
   const totalPrice = records.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
@@ -272,7 +429,7 @@ const renderSearch = (records) => {
     <div class="flex-between" style="margin:12px 0 6px;">
       <div class="badge">记录数：${fmtNumber(records.length)}</div>
       <div class="badge">总数量：${fmtNumber(totalNum)}</div>
-      <div class="badge">总金额：${fmtNumber(totalPrice)}</div>
+      <div class="badge">总金额（元）：${fmtCurrency(totalPrice)}</div>
       <div class="badge">最新时间：${latestTs ? fmtTime(latestTs) : "-"}</div>
     </div>
   `;
@@ -292,7 +449,7 @@ const renderSearch = (records) => {
     [
       { key: "gift_name", label: "礼物" },
       { key: "total_num", label: "数量合计", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
       { key: "user_count", label: "涉及用户", className: "number", render: (v) => fmtNumber(v) },
       { key: "latest_ts", label: "最新时间", render: (v) => fmtTime(v) },
     ],
@@ -306,7 +463,7 @@ const renderSearch = (records) => {
     [
       { key: "uname", label: "用户" },
       { key: "total_num", label: "礼物数量", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "合计金额", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "合计金额（元）", className: "number", render: (v) => fmtCurrency(v) },
       { key: "gift_count", label: "礼物种类", className: "number", render: (v) => fmtNumber(v) },
       { key: "latest_ts", label: "最新时间", render: (v) => fmtTime(v) },
     ],
@@ -324,19 +481,29 @@ const renderSearch = (records) => {
       { key: "uname", label: "用户" },
       { key: "gift_name", label: "礼物" },
       { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
     ],
     "暂无记录"
   );
 };
 
-async function search() {
-  const uname = document.getElementById("uname").value.trim();
-  const gift = document.getElementById("gift").value.trim();
-  const limitInput = document.getElementById("limit");
-  const limit = parseInt(limitInput.value, 10) || 200;
-  const startInput = document.getElementById("startTime");
-  const startValue = startInput.value;
+const getInputValue = (id) => document.getElementById(id)?.value.trim();
+
+const setDefaultStartTime = (id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const start = defaultStartDate();
+  el.value = start.toISOString().slice(0, 16);
+};
+
+async function search(viewKey) {
+  const cfg = viewConfigs[viewKey];
+  const inputs = cfg.search.inputs;
+  const uname = getInputValue(inputs.uname);
+  const gift = getInputValue(inputs.gift);
+  const limit = parseInt(document.getElementById(inputs.limit)?.value || "0", 10) || 200;
+  const startInput = document.getElementById(inputs.start);
+  const startValue = startInput?.value;
   const parsedStart = startValue ? Math.floor(new Date(startValue).getTime() / 1000) : NaN;
   const start_ts = Number.isNaN(parsedStart) ? undefined : parsedStart;
 
@@ -351,15 +518,16 @@ async function search() {
 
   const resp = await fetch(`/api/search?${params.toString()}`);
   const data = await resp.json();
-  renderSearch(data);
+  renderSearch(data, cfg.search.outputs);
 }
 
-async function loadAll() {
-  const limitInput = document.getElementById("allLimit");
-  const limit = parseInt(limitInput.value, 10) || 200;
+async function loadAll(viewKey) {
+  const cfg = viewConfigs[viewKey];
+  const limitInput = document.getElementById(cfg.latest.limit);
+  const limit = parseInt(limitInput?.value || "0", 10) || 200;
   const resp = await fetch(`/api/gifts?limit=${limit}`);
   const data = await resp.json();
-  const container = document.getElementById("allOut");
+  const container = document.getElementById(cfg.latest.output);
   renderTable(
     container,
     data,
@@ -368,10 +536,11 @@ async function loadAll() {
       { key: "uname", label: "用户" },
       { key: "gift_name", label: "礼物" },
       { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
     ],
     "暂无礼物流水"
   );
+  viewState[viewKey].loadedAll = true;
 }
 
 async function loadRoomGiftList() {
@@ -395,24 +564,48 @@ async function loadRoomGiftList() {
       ],
       "暂无礼物信息"
     );
+    viewState.desktop.roomLoaded = true;
   } catch (err) {
     out.innerHTML = `<div class="empty">加载失败：${err}</div>`;
   }
 }
 
-const startTimeInput = document.getElementById("startTime");
-const setDefaultStartTime = () => {
-  const start = defaultStartDate();
-  startTimeInput.value = start.toISOString().slice(0, 16);
+const initView = (viewKey) => {
+  const cfg = viewConfigs[viewKey];
+  setDefaultStartTime(cfg.search.inputs.start);
+  document.getElementById(cfg.search.button)?.addEventListener("click", () => search(viewKey));
+  document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey));
+  if (cfg.roomGifts) {
+    document.getElementById(cfg.roomGifts.button)?.addEventListener("click", loadRoomGiftList);
+  }
+  viewState[viewKey].initialized = true;
 };
 
-document.getElementById("btnSearch").addEventListener("click", search);
-document.getElementById("btnLoadAll").addEventListener("click", loadAll);
-document.getElementById("btnLoadRoomGifts").addEventListener("click", loadRoomGiftList);
+const switchView = (target) => {
+  Object.entries(viewConfigs).forEach(([key, cfg]) => {
+    cfg.root.classList.toggle("active", key === target);
+  });
+  document.querySelectorAll(".toggle-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.viewTarget === target);
+  });
 
-setDefaultStartTime();
-loadAll();
-loadRoomGiftList();
+  if (!viewState[target].initialized) {
+    initView(target);
+  }
+  if (!viewState[target].loadedAll) {
+    loadAll(target);
+  }
+  if (target === "desktop" && !viewState.desktop.roomLoaded) {
+    loadRoomGiftList();
+  }
+};
+
+document.querySelectorAll("[data-view-target]").forEach((btn) => {
+  btn.addEventListener("click", () => switchView(btn.dataset.viewTarget));
+});
+
+initView("desktop");
+switchView("desktop");
 </script>
 </body>
 </html>
