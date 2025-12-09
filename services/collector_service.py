@@ -28,7 +28,12 @@ class CollectorService:
 
     async def _fetch_room_init(self) -> Optional[Dict[str, Any]]:
         """Fetch room init info with asyncio + aiohttp to avoid urllib SSL errors on Windows."""
-        import aiohttp
+
+        try:
+            import aiohttp
+        except Exception as exc:  # pragma: no cover - 环境缺少 aiohttp 时回退
+            self.logger.debug("aiohttp 不可用，跳过异步房间信息获取", exc_info=exc)
+            return None
 
         url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={self.settings.room_id}"
         headers = {
