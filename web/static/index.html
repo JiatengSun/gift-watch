@@ -191,7 +191,7 @@
     <div class="hero">
       <div>
         <div class="hero-title">Gift Watch <span class="pill">实时礼物监控</span></div>
-        <p class="hint">桌面版保留全部功能，手机 / 平板版仅保留搜索与全部清单，方便触摸操作。</p>
+        <p class="hint">桌面版保留全部功能，手机 / 平板版仅保留搜索与全部清单，方便触摸操作。金额已按电池价值折算（1 电池=¥0.1）。</p>
       </div>
       <div class="view-toggle" aria-label="界面切换">
         <button class="toggle-btn active" data-view-target="desktop">桌面版</button>
@@ -321,6 +321,9 @@ const fmtTime = (ts) => {
 };
 
 const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
+const coinsToYuan = (coins) => (Number(coins) || 0) / 1000;
+const fmtCurrency = (coins) =>
+  new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(coinsToYuan(coins));
 
 const defaultStartDate = () => {
   const now = new Date();
@@ -426,7 +429,7 @@ const renderSearch = (records, targets) => {
     <div class="flex-between" style="margin:12px 0 6px;">
       <div class="badge">记录数：${fmtNumber(records.length)}</div>
       <div class="badge">总数量：${fmtNumber(totalNum)}</div>
-      <div class="badge">总金额：${fmtNumber(totalPrice)}</div>
+      <div class="badge">总金额（元）：${fmtCurrency(totalPrice)}</div>
       <div class="badge">最新时间：${latestTs ? fmtTime(latestTs) : "-"}</div>
     </div>
   `;
@@ -446,7 +449,7 @@ const renderSearch = (records, targets) => {
     [
       { key: "gift_name", label: "礼物" },
       { key: "total_num", label: "数量合计", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
       { key: "user_count", label: "涉及用户", className: "number", render: (v) => fmtNumber(v) },
       { key: "latest_ts", label: "最新时间", render: (v) => fmtTime(v) },
     ],
@@ -460,7 +463,7 @@ const renderSearch = (records, targets) => {
     [
       { key: "uname", label: "用户" },
       { key: "total_num", label: "礼物数量", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "合计金额", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "合计金额（元）", className: "number", render: (v) => fmtCurrency(v) },
       { key: "gift_count", label: "礼物种类", className: "number", render: (v) => fmtNumber(v) },
       { key: "latest_ts", label: "最新时间", render: (v) => fmtTime(v) },
     ],
@@ -478,7 +481,7 @@ const renderSearch = (records, targets) => {
       { key: "uname", label: "用户" },
       { key: "gift_name", label: "礼物" },
       { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
     ],
     "暂无记录"
   );
@@ -533,7 +536,7 @@ async function loadAll(viewKey) {
       { key: "uname", label: "用户" },
       { key: "gift_name", label: "礼物" },
       { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "总价", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
     ],
     "暂无礼物流水"
   );
