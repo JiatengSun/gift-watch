@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 import logging
 
 from config.settings import Settings
-from core.gift_parser import parse_send_gift, GiftEvent
+from core.gift_parser import parse_send_gift, GiftEvent, SUPPORTED_GIFT_CMDS
 from db.repo import insert_gift
 from core.rule_engine import GiftRule
 from core.rate_limiter import RateLimiter
@@ -25,8 +25,20 @@ class IngestPipeline:
         self.logger = logging.getLogger(__name__)
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
+        # AsyncEvent 会在触发任意事件时再派发一次 __ALL__，形式为
+        # {"name": "<cmd>", "data": (<event>,)}，这里兼容这种结构。
+        if isinstance(event, dict) and "name" in event and "data" in event:
+            data = event.get("data")
+            if isinstance(data, (list, tuple)) and data and isinstance(data[0], dict):
+                inner_event = dict(data[0])
+                if "cmd" not in inner_event and event.get("name"):
+                    inner_event["cmd"] = event["name"]
+                event = inner_event
+
         cmd = event.get("cmd") or event.get("command")
-        if cmd and cmd != "SEND_GIFT":
+        if cmd and cmd not in SUPPORTED_GIFT_CMDS:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
             return
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("收到事件 cmd=%s keys=%s", cmd, list(event.keys()))
