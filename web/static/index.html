@@ -224,18 +224,39 @@ const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
 
 const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
   if (!rows.length) {
-    container.innerHTML = `<div class="empty">${emptyText}</div>`;
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = emptyText;
+    container.replaceChildren(empty);
     return;
   }
-  const header = columns.map((c) => `<th>${c.label}</th>`).join("");
-  const body = rows
-    .map((row) =>
-      `<tr>${columns
-        .map((c) => `<td class="${c.className || ''}">${c.render ? c.render(row[c.key], row) : row[c.key]}</td>`)
-        .join("")}</tr>`
-    )
-    .join("");
-  container.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  columns.forEach((c) => {
+    const th = document.createElement("th");
+    th.textContent = c.label ?? "";
+    headRow.append(th);
+  });
+  thead.append(headRow);
+  table.append(thead);
+
+  const tbody = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    columns.forEach((c) => {
+      const td = document.createElement("td");
+      if (c.className) td.className = c.className;
+      const value = c.render ? c.render(row[c.key], row) : row[c.key];
+      td.textContent = value ?? "";
+      tr.append(td);
+    });
+    tbody.append(tr);
+  });
+  table.append(tbody);
+
+  container.replaceChildren(table);
 };
 
 const groupByGift = (records) => {
