@@ -242,27 +242,13 @@
           <span class="badge" id="totalFlowMeta">记录：- ｜ 数量：-</span>
         </div>
         <div class="flow-value" id="totalFlowValue">¥-</div>
-        <div class="hint">基于当前“最新礼物流水”，金额已自动换算成元</div>
       </div>
       <div class="view-toggle" aria-label="界面切换">
         <button class="toggle-btn active" data-view-target="desktop">桌面版</button>
         <button class="toggle-btn" data-view-target="mobile">手机专用</button>
         <button class="toggle-btn" data-view-target="tablet">平板专用</button>
+        <button class="toggle-btn" data-view-target="console">控制台</button>
       </div>
-    </div>
-
-    <div class="card console-card">
-      <div class="section-header">
-        <h2>控制台</h2>
-        <span class="muted">快速查看 / 删除指定送礼记录</span>
-      </div>
-      <div class="row">
-        <input id="consoleRecordId" type="number" min="1" placeholder="记录 ID" aria-label="记录 ID" />
-        <button id="btnInspectRecord">查看记录</button>
-        <button id="btnDeleteRecord" style="background:linear-gradient(135deg,#f472b6,#ec4899);">删除记录</button>
-      </div>
-      <p class="hint" style="margin:8px 0;">可先在“最新礼物流水”中查看 ID，然后在此删除；删除成功后将自动刷新当前视图。</p>
-      <div id="consoleLog" class="console-log" aria-live="polite"></div>
     </div>
 
     <!-- 桌面版：原有布局，包含房间礼物清单 -->
@@ -339,6 +325,23 @@
         </div>
         <p class="hint">表格可左右滑动查看全部字段。</p>
         <div id="allOut-mobile"></div>
+      </div>
+    </div>
+
+    <!-- 控制台：单独页面，专注管理操作 -->
+    <div id="view-console" class="view">
+      <div class="card console-card">
+        <div class="section-header">
+          <h2>控制台</h2>
+          <span class="muted">快速查看 / 删除指定送礼记录</span>
+        </div>
+        <div class="row">
+          <input id="consoleRecordId" type="number" min="1" placeholder="记录 ID" aria-label="记录 ID" />
+          <button id="btnInspectRecord">查看记录</button>
+          <button id="btnDeleteRecord" style="background:linear-gradient(135deg,#f472b6,#ec4899);">删除记录</button>
+        </div>
+        <p class="hint" style="margin:8px 0;">可先在“最新礼物流水”中查看 ID，然后在此删除；删除成功后将自动刷新当前视图。</p>
+        <div id="consoleLog" class="console-log" aria-live="polite"></div>
       </div>
     </div>
 
@@ -487,6 +490,9 @@ const viewConfigs = {
       outputs: { summary: "searchSummary-tablet", aggregated: "searchAggregated-tablet", raw: "searchRaw-tablet" },
     },
     latest: { button: "btnLoadAll-tablet", limit: "allLimit-tablet", output: "allOut-tablet" },
+  },
+  console: {
+    root: document.getElementById("view-console"),
   },
 };
 
@@ -712,9 +718,13 @@ async function loadRoomGiftList() {
 
 const initView = (viewKey) => {
   const cfg = viewConfigs[viewKey];
-  setDefaultStartTime(cfg.search.inputs.start);
-  document.getElementById(cfg.search.button)?.addEventListener("click", () => search(viewKey));
-  document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey));
+  if (cfg.search) {
+    setDefaultStartTime(cfg.search.inputs.start);
+    document.getElementById(cfg.search.button)?.addEventListener("click", () => search(viewKey));
+  }
+  if (cfg.latest) {
+    document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey));
+  }
   if (cfg.roomGifts) {
     document.getElementById(cfg.roomGifts.button)?.addEventListener("click", loadRoomGiftList);
   }
@@ -730,11 +740,12 @@ const switchView = (target) => {
   });
 
   activeView = target;
+  const cfg = viewConfigs[target];
 
   if (!viewState[target].initialized) {
     initView(target);
   }
-  if (!viewState[target].loadedAll) {
+  if (cfg.latest && !viewState[target].loadedAll) {
     loadAll(target);
   }
   if (target === "desktop" && !viewState.desktop.roomLoaded) {
