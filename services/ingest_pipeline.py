@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, DefaultDict, Dict, Optional
 import logging
+import asyncio
+from collections import defaultdict
+from dataclasses import dataclass, field
 
 from config.settings import Settings
 from core.gift_parser import parse_send_gift, GiftEvent, SUPPORTED_GIFT_CMDS
@@ -10,7 +13,16 @@ from core.rule_engine import GiftRule
 from core.rate_limiter import RateLimiter
 from core.danmaku_sender import DanmakuSender
 
+
+@dataclass
+class PendingThanks:
+    uname: str
+    gifts: DefaultDict[str, int] = field(default_factory=lambda: defaultdict(int))
+    task: Optional[asyncio.Task] = None
+
 class IngestPipeline:
+    THANK_DELAY_SECONDS = 5
+
     def __init__(
         self,
         settings: Settings,
@@ -23,6 +35,7 @@ class IngestPipeline:
         self.limiter = limiter
         self.sender = sender
         self.logger = logging.getLogger(__name__)
+        self._pending_thanks: Dict[Any, PendingThanks] = {}
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
         # AsyncEvent 会在触发任意事件时再派发一次 __ALL__，形式为
@@ -67,7 +80,34 @@ class IngestPipeline:
         if not self.rule.hit(gift):
             return
 
-        if gift.uid and not self.limiter.allow(gift.uid, gift.ts):
+        # COMBO_SEND 会频繁触发多次事件，如果套用全局/用户冷却会导致只有第一条连击礼物被回复。
+        # 对于连击，直接跳过冷却限制，保证每个连击包裹都能被计入 5 秒内的结算。
+        if cmd != "COMBO_SEND" and gift.uid and not self.limiter.allow(gift.uid, gift.ts):
             return
 
-        await self.sender.send_thanks(gift.uname, gift.gift_name, gift.num)
+        self._buffer_thanks(gift)
+
+    def _buffer_thanks(self, gift: GiftEvent) -> None:
+        """将同一用户 5 秒内的礼物合并，再发送一条汇总感谢，避免刷屏。"""
+
+        if self.sender is None:
+            return
+
+        key = gift.uid or f"guest:{gift.uname}"
+        pending = self._pending_thanks.get(key)
+        if pending is None:
+            pending = PendingThanks(uname=gift.uname)
+            self._pending_thanks[key] = pending
+            pending.task = asyncio.create_task(self._flush_thanks_after_delay(key))
+
+        pending.uname = gift.uname  # 更新昵称，避免用户改名导致的旧称呼
+        pending.gifts[gift.gift_name] += gift.num or 1
+
+    async def _flush_thanks_after_delay(self, key: Any) -> None:
+        try:
+            await asyncio.sleep(self.THANK_DELAY_SECONDS)
+            pending = self._pending_thanks.pop(key, None)
+            if pending and pending.gifts and self.sender:
+                await self.sender.send_summary_thanks(pending.uname, dict(pending.gifts))
+        except Exception:
+            self.logger.exception("发送汇总感谢消息失败")

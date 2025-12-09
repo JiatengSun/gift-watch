@@ -110,16 +110,27 @@ class CollectorService:
             return False
 
     def bind_all_handler(self, handler: EventHandler) -> None:
-        # 部分 bilibili-api 版本没有 "ALL" 事件，这里显式监听 SEND_GIFT，
-        # 并在失败时回退到 __ALL__，避免礼物消息丢失或重复处理。
-        if self._bind("SEND_GIFT", handler):
+        """
+        优先按具体礼物事件进行绑定，确保连击事件不会漏算：
+
+        1. 先尝试绑定 SEND_GIFT / COMBO_SEND，这样连击触发的 COMBO_SEND
+           事件可以直接被处理，避免只结算第一个包裹的情况。
+        2. 如果某些 bilibili-api 版本不存在这些事件或绑定方式抛错，则回退
+           到 __ALL__，由上层自行解析 cmd，保证兼容性。
+        3. 若所有方式均失败，抛出异常提示配置/版本问题。
+        """
+        bound = False
+        for event_name in ("SEND_GIFT", "COMBO_SEND"):
+            bound = self._bind(event_name, handler) or bound
+
+        if bound:
             return
 
         if self._bind("__ALL__", handler):
             return
 
         raise RuntimeError(
-            "无法绑定 LiveDanmaku 事件处理器（SEND_GIFT 或 __ALL__），请检查 bilibili-api-python 版本的事件接口。"
+            "无法绑定 LiveDanmaku 事件处理器（SEND_GIFT / COMBO_SEND 或 __ALL__），请检查 bilibili-api-python 版本的事件接口。"
         )
 
     async def run(self) -> None:
