@@ -26,24 +26,65 @@ class CollectorService:
         self.danmaku = live.LiveDanmaku(settings.room_id, credential=credential)
         self.logger = logging.getLogger(__name__)
 
-    def log_room_status(self) -> None:
+    async def _fetch_room_init(self) -> Optional[Dict[str, Any]]:
+        """Fetch room init info with asyncio + aiohttp to avoid urllib SSL errors on Windows."""
+        import aiohttp
+
         url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={self.settings.room_id}"
+        headers = {
+            # B 站接口如果没有常见浏览器 UA 会返回 412，补充请求头提升成功率。
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/127.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://live.bilibili.com/",
+        }
+        timeout = aiohttp.ClientTimeout(total=5)
         try:
-            with urllib.request.urlopen(url, timeout=5) as resp:
-                payload = resp.read().decode("utf-8")
-            data = json.loads(payload)
-            if data.get("code") == 0 and isinstance(data.get("data"), dict):
-                info = data["data"]
-                self.logger.info(
-                    "房间初始化信息：room_id=%s uid=%s live_status=%s (1=直播中 0=未开播)",
-                    info.get("room_id"),
-                    info.get("uid"),
-                    info.get("live_status"),
-                )
-            else:
-                self.logger.warning("无法获取房间信息：%s", data)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, headers=headers) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
         except Exception as exc:
             self.logger.debug("获取房间信息失败", exc_info=exc)
+            return None
+
+    async def log_room_status(self) -> None:
+        payload: Optional[Dict[str, Any]] = None
+
+        # Primary path: aiohttp (handles TLS better on部分 Windows 环境)
+        payload = await self._fetch_room_init()
+
+        # Fallback to urllib in case aiohttp is unavailable at runtime
+        if payload is None:
+            url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={self.settings.room_id}"
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/127.0.0.0 Safari/537.36"
+                ),
+                "Referer": "https://live.bilibili.com/",
+            }
+            try:
+                request = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(request, timeout=5) as resp:
+                    payload_text = resp.read().decode("utf-8")
+                payload = json.loads(payload_text)
+            except Exception as exc:
+                self.logger.debug("获取房间信息失败", exc_info=exc)
+
+        if payload and payload.get("code") == 0 and isinstance(payload.get("data"), dict):
+            info = payload["data"]
+            self.logger.info(
+                "房间初始化信息：room_id=%s uid=%s live_status=%s (1=直播中 0=未开播)",
+                info.get("room_id"),
+                info.get("uid"),
+                info.get("live_status"),
+            )
+        elif payload is not None:
+            self.logger.warning("无法获取房间信息：%s", payload)
 
     def _bind(self, event_name: str, handler: EventHandler) -> bool:
         try:
