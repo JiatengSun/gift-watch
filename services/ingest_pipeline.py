@@ -40,7 +40,7 @@ class IngestPipeline:
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
             return
-        if self.logger.isEnabledFor(logging.DEBUG):
+        if cmd and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("收到事件 cmd=%s keys=%s", cmd, list(event.keys()))
         gift = parse_send_gift(event, room_id=self.settings.room_id)
         if gift is None:
