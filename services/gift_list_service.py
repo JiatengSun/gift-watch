@@ -22,7 +22,14 @@ def fetch_room_gift_list(settings: Settings) -> List[Dict[str, Any]]:
     )
 
     try:
-        req = urllib.request.Request(url)
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0",
+                "Referer": f"https://live.bilibili.com/{settings.room_id}",
+                "Origin": "https://live.bilibili.com",
+            },
+        )
         with urllib.request.urlopen(req, timeout=10) as resp:
             raw = resp.read().decode("utf-8")
         payload = json.loads(raw)
