@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query
 
 from config.settings import get_settings
 from db.repo import query_gifts_by_uname, query_gifts_by_uname_and_gift, query_recent_gifts
+from services.gift_list_service import fetch_room_gift_list
 
 router = APIRouter()
 
@@ -49,6 +50,12 @@ def list_gifts(limit: int = Query(200, ge=1, le=1000)):
         }
         for r in rows
     ]
+
+
+@router.get("/api/room_gift_list")
+def room_gift_list():
+    settings = get_settings()
+    return fetch_room_gift_list(settings)
 
 @router.get("/api/check")
 def check(

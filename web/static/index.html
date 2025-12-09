@@ -32,6 +32,13 @@
   <div class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</div>
   <pre id="allOut">[]</pre>
 
+  <h3>房间礼物清单（实时）</h3>
+  <div class="row">
+    <button id="btnLoadRoomGifts">刷新礼物清单</button>
+  </div>
+  <div class="hint">直接来自 B 站接口，展示房间内可送出的礼物及其 ID/价格。</div>
+  <pre id="roomGiftsOut">[]</pre>
+
 <script>
 async function search() {
   const uname = document.getElementById("uname").value.trim();
@@ -56,10 +63,27 @@ async function loadAll() {
   document.getElementById("allOut").textContent = JSON.stringify(data, null, 2);
 }
 
+async function loadRoomGiftList() {
+  const out = document.getElementById("roomGiftsOut");
+  out.textContent = "加载中...";
+  try {
+    const resp = await fetch("/api/room_gift_list");
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    out.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    out.textContent = `加载失败：${err}`;
+  }
+}
+
 document.getElementById("btnSearch").addEventListener("click", search);
 document.getElementById("btnLoadAll").addEventListener("click", loadAll);
+document.getElementById("btnLoadRoomGifts").addEventListener("click", loadRoomGiftList);
 
 loadAll();
+loadRoomGiftList();
 </script>
 </body>
 </html>
