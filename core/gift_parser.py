@@ -17,10 +17,13 @@ class GiftEvent:
     total_price: int
     raw_json: str
 
+SUPPORTED_GIFT_CMDS = {"SEND_GIFT", "COMBO_SEND"}
+
+
 def parse_send_gift(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
     # 兼容不同封装形态
     cmd = event.get("cmd") or event.get("command")
-    if cmd != "SEND_GIFT":
+    if cmd not in SUPPORTED_GIFT_CMDS:
         return None
 
     outer_data = event.get("data") or {}
@@ -51,14 +54,20 @@ def parse_send_gift(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
     except Exception:
         gift_id = 0
 
-    try:
-        num = int(data.get("num") or 1)
-    except Exception:
-        num = 1
+    num = 1
+    for k in ("num", "total_num", "combo_num"):
+        v = data.get(k)
+        if v is None:
+            continue
+        try:
+            num = int(v)
+            break
+        except Exception:
+            continue
 
     # 价格字段在不同事件里有差异，这里尽量容错
     total_price = 0
-    for k in ("total_coin", "totalCoin", "price", "giftPrice"):
+    for k in ("total_coin", "totalCoin", "price", "giftPrice", "combo_total_coin"):
         v = data.get(k)
         if v is None:
             continue

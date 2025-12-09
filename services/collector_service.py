@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable, Any, Dict, Optional
 import logging
+import json
+import urllib.request
 
 from bilibili_api import live, Credential
 
@@ -23,6 +25,25 @@ class CollectorService:
         # which raises "Invalid variable type" errors during connection.
         self.danmaku = live.LiveDanmaku(settings.room_id, credential=credential)
         self.logger = logging.getLogger(__name__)
+
+    def log_room_status(self) -> None:
+        url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={self.settings.room_id}"
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                payload = resp.read().decode("utf-8")
+            data = json.loads(payload)
+            if data.get("code") == 0 and isinstance(data.get("data"), dict):
+                info = data["data"]
+                self.logger.info(
+                    "房间初始化信息：room_id=%s uid=%s live_status=%s (1=直播中 0=未开播)",
+                    info.get("room_id"),
+                    info.get("uid"),
+                    info.get("live_status"),
+                )
+            else:
+                self.logger.warning("无法获取房间信息：%s", data)
+        except Exception as exc:
+            self.logger.debug("获取房间信息失败", exc_info=exc)
 
     def _bind(self, event_name: str, handler: EventHandler) -> bool:
         try:

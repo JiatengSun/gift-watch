@@ -25,6 +25,7 @@ async def main() -> None:
 
     pipeline = build_pipeline(settings)
     collector = CollectorService(settings)
+    collector.log_room_status()
     collector.bind_all_handler(pipeline.handle_event)
 
     print(f"[gift-watch] Listening room {settings.room_id} ...")

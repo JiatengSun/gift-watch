@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 import logging
 
 from config.settings import Settings
-from core.gift_parser import parse_send_gift, GiftEvent
+from core.gift_parser import parse_send_gift, GiftEvent, SUPPORTED_GIFT_CMDS
 from db.repo import insert_gift
 from core.rule_engine import GiftRule
 from core.rate_limiter import RateLimiter
@@ -36,7 +36,7 @@ class IngestPipeline:
                 event = inner_event
 
         cmd = event.get("cmd") or event.get("command")
-        if cmd and cmd != "SEND_GIFT":
+        if cmd and cmd not in SUPPORTED_GIFT_CMDS:
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
             return
