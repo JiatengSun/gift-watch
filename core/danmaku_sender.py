@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Mapping, Optional
 
 from bilibili_api import live, Credential
 
@@ -20,4 +20,11 @@ class DanmakuSender:
         room = self._get_room()
         msg = f"谢谢 {uname} 送的 {gift_name} x{num}！太帅了！"
         # send_danmaku 需要 Danmaku 对象而非纯文本
+        await room.send_danmaku(live.Danmaku(msg))
+
+    async def send_summary_thanks(self, uname: str, gifts: Mapping[str, int]) -> None:
+        room = self._get_room()
+        parts = [f"{name} x{count}" for name, count in gifts.items()]
+        gift_text = "，".join(parts) if parts else "礼物"
+        msg = f"谢谢 {uname} 送的 {gift_text}！太帅了！"
         await room.send_danmaku(live.Danmaku(msg))
