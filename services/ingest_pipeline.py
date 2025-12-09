@@ -35,7 +35,9 @@ class IngestPipeline:
                     inner_event["cmd"] = event["name"]
                 event = inner_event
 
-        cmd = event.get("cmd") or event.get("command")
+        cmd = event.get("cmd") or event.get("command") or event.get("type")
+        if cmd and "cmd" not in event:
+            event["cmd"] = cmd
         if cmd and cmd not in SUPPORTED_GIFT_CMDS:
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
