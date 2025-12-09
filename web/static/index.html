@@ -37,7 +37,9 @@
 
     .page { max-width: 1280px; margin: 0 auto; }
 
-    .hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+
+    .hero-left { min-width: 220px; }
 
     .hero-title {
       font-size: 32px;
@@ -75,15 +77,20 @@
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
     }
 
-    .metric-card {
-      margin-bottom: 16px;
+    .flow-chip {
+      padding: 10px 12px;
+      border-radius: 14px;
       border: 1px solid rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.08);
+      display: grid;
+      gap: 4px;
+      min-width: 240px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
     }
 
-    .metric-value {
-      font-size: 36px;
+    .flow-value {
+      font-size: 22px;
       font-weight: 800;
-      margin-top: 8px;
       color: #67e8f9;
       letter-spacing: 0.02em;
     }
@@ -171,6 +178,29 @@
 
     .toggle-btn.active { border-color: var(--primary); background: rgba(56, 189, 248, 0.12); color: #67e8f9; }
 
+    .console-card {
+      margin-bottom: 16px;
+      border: 1px dashed rgba(148, 163, 184, 0.4);
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(8, 15, 32, 0.9));
+    }
+
+    .console-log {
+      background: #0a1020;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 110px;
+      font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      color: #e2e8f0;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    .console-log .line.info { color: #67e8f9; }
+    .console-log .line.error { color: #f472b6; }
+    .console-log .line.success { color: #34d399; }
+
     .view { display: none; }
     .view.active { display: block; }
 
@@ -202,9 +232,17 @@
 <body>
   <div class="page">
     <div class="hero">
-      <div>
+      <div class="hero-left">
         <div class="hero-title">Gift Watch <span class="pill">实时礼物监控</span></div>
         <p class="hint">桌面版保留全部功能，手机 / 平板版仅保留搜索与全部清单，方便触摸操作。金额已按电池价值折算（1 电池=¥0.1）。</p>
+      </div>
+      <div class="flow-chip" aria-live="polite">
+        <div class="flex-between" style="gap:10px; align-items:center;">
+          <span class="muted" style="font-weight:600;">总流水</span>
+          <span class="badge" id="totalFlowMeta">记录：- ｜ 数量：-</span>
+        </div>
+        <div class="flow-value" id="totalFlowValue">¥-</div>
+        <div class="hint">基于当前“最新礼物流水”，金额已自动换算成元</div>
       </div>
       <div class="view-toggle" aria-label="界面切换">
         <button class="toggle-btn active" data-view-target="desktop">桌面版</button>
@@ -213,15 +251,18 @@
       </div>
     </div>
 
-    <div class="card metric-card">
-      <div class="flex-between" style="gap:8px; align-items: flex-end;">
-        <div>
-          <h2 style="margin-bottom:4px;">总流水</h2>
-          <p class="hint">基于当前加载的“最新礼物流水”列表实时计算，单位为元。</p>
-        </div>
-        <div class="badge" id="totalFlowMeta">记录：- ｜ 数量：-</div>
+    <div class="card console-card">
+      <div class="section-header">
+        <h2>控制台</h2>
+        <span class="muted">快速查看 / 删除指定送礼记录</span>
       </div>
-      <div class="metric-value" id="totalFlowValue">-</div>
+      <div class="row">
+        <input id="consoleRecordId" type="number" min="1" placeholder="记录 ID" aria-label="记录 ID" />
+        <button id="btnInspectRecord">查看记录</button>
+        <button id="btnDeleteRecord" style="background:linear-gradient(135deg,#f472b6,#ec4899);">删除记录</button>
+      </div>
+      <p class="hint" style="margin:8px 0;">可先在“最新礼物流水”中查看 ID，然后在此删除；删除成功后将自动刷新当前视图。</p>
+      <div id="consoleLog" class="console-log" aria-live="polite"></div>
     </div>
 
     <!-- 桌面版：原有布局，包含房间礼物清单 -->
@@ -349,6 +390,15 @@ const coinsToYuan = (coins) => (Number(coins) || 0) / 1000;
 const fmtCurrency = (coins) =>
   new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(coinsToYuan(coins));
 
+const logConsole = (message, type = "info") => {
+  const log = document.getElementById("consoleLog");
+  if (!log) return;
+  const line = document.createElement("div");
+  line.className = `line ${type}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  log.prepend(line);
+};
+
 const defaultStartDate = () => {
   const now = new Date();
   const start = new Date(now);
@@ -406,6 +456,8 @@ const groupByUser = (records) => {
     .map((v) => ({ ...v, gift_count: v.gifts.size || 0 }))
     .sort((a, b) => b.total_num - a.total_num || b.latest_ts - a.latest_ts);
 };
+
+let activeView = "desktop";
 
 const viewConfigs = {
   desktop: {
@@ -501,6 +553,7 @@ const renderSearch = (records, targets) => {
     rawContainer,
     records,
     [
+      { key: "id", label: "ID", className: "number" },
       { key: "ts", label: "时间", render: (v) => fmtTime(v) },
       { key: "uname", label: "用户" },
       { key: "gift_name", label: "礼物" },
@@ -530,6 +583,55 @@ const updateTotalFlow = (records) => {
 
   valueEl.textContent = `¥${fmtCurrency(totalPrice)}`;
   metaEl.textContent = `记录：${fmtNumber(records.length)} ｜ 数量：${fmtNumber(totalNum)}`;
+};
+
+const getConsoleRecordId = () => {
+  const input = document.getElementById("consoleRecordId");
+  if (!input) return null;
+  const val = Number(input.value.trim());
+  if (!val || val < 1) {
+    logConsole("请输入有效的记录 ID", "error");
+    return null;
+  }
+  return val;
+};
+
+const inspectRecord = async () => {
+  const id = getConsoleRecordId();
+  if (!id) return;
+  try {
+    const resp = await fetch(`/api/gifts/${id}`);
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    logConsole(
+      `记录 ${id}: 用户 ${data.uname || "(未知)"} 送出 ${data.gift_name || "-"} x${fmtNumber(data.num)}，金额 ¥${fmtCurrency(
+        data.total_price
+      )}，时间 ${fmtTime(data.ts)}`,
+      "info"
+    );
+  } catch (err) {
+    logConsole(`查看失败：${err.message || err}`, "error");
+  }
+};
+
+const deleteRecord = async () => {
+  const id = getConsoleRecordId();
+  if (!id) return;
+  const confirmed = confirm(`确认删除记录 ${id} 吗？此操作不可恢复。`);
+  if (!confirmed) return;
+  try {
+    const resp = await fetch(`/api/gifts/${id}`, { method: "DELETE" });
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      throw new Error(errorText || `HTTP ${resp.status}`);
+    }
+    logConsole(`已删除记录 ${id}，正在刷新列表...`, "success");
+    loadAll(activeView);
+  } catch (err) {
+    logConsole(`删除失败：${err.message || err}`, "error");
+  }
 };
 
 async function search(viewKey) {
@@ -568,6 +670,7 @@ async function loadAll(viewKey) {
     container,
     data,
     [
+      { key: "id", label: "ID", className: "number" },
       { key: "ts", label: "时间", render: (v) => fmtTime(v) },
       { key: "uname", label: "用户" },
       { key: "gift_name", label: "礼物" },
@@ -626,6 +729,8 @@ const switchView = (target) => {
     btn.classList.toggle("active", btn.dataset.viewTarget === target);
   });
 
+  activeView = target;
+
   if (!viewState[target].initialized) {
     initView(target);
   }
@@ -640,6 +745,10 @@ const switchView = (target) => {
 document.querySelectorAll("[data-view-target]").forEach((btn) => {
   btn.addEventListener("click", () => switchView(btn.dataset.viewTarget));
 });
+
+document.getElementById("btnInspectRecord")?.addEventListener("click", inspectRecord);
+document.getElementById("btnDeleteRecord")?.addEventListener("click", deleteRecord);
+logConsole("控制台已就绪，可输入记录 ID 查看或删除。", "info");
 
 initView("desktop");
 switchView("desktop");
