@@ -471,10 +471,31 @@
 
 <script>
 const TARGET_TIMEZONE = "Asia/Shanghai";
-const TARGET_TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-const shiftToTargetTz = (date) => new Date(date.getTime() + TARGET_TZ_OFFSET_MS);
-const shiftFromTargetTz = (date) => new Date(date.getTime() - TARGET_TZ_OFFSET_MS);
+const getTargetDateInfo = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TARGET_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    timeZoneName: "shortOffset",
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const weekdayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[map.weekday] ?? 0;
+
+  const tzName = map.timeZoneName || "GMT";
+  const match = tzName.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  const sign = match?.[1]?.startsWith("-") ? "-" : "+";
+  const hours = (match?.[1]?.replace(/[+-]/, "") || "0").padStart(2, "0");
+  const minutes = (match?.[2] || "00").padStart(2, "0");
+  const offset = `${sign}${hours}:${minutes}`;
+
+  return { year: map.year, month: map.month, day: map.day, weekday: weekdayIndex, offset };
+};
+
+const buildTargetDate = (year, month, day, offset) => new Date(`${year}-${month}-${day}T00:00:00${offset}`);
 
 const fmtTime = (ts) => {
   if (!ts) return "-";
@@ -497,27 +518,27 @@ const logConsole = (message, type = "info") => {
 };
 
 const defaultStartDate = () => {
-  const now = shiftToTargetTz(new Date());
-  const start = new Date(now);
-  start.setUTCHours(8, 0, 0, 0);
-  if (start > now) {
-    start.setUTCDate(start.getUTCDate() - 1);
+  const info = getTargetDateInfo();
+  const eightAm = new Date(`${info.year}-${info.month}-${info.day}T08:00:00${info.offset}`);
+  const now = new Date();
+  const nowInTarget = new Date(now.toLocaleString("en-US", { timeZone: TARGET_TIMEZONE }));
+  if (eightAm > nowInTarget) {
+    eightAm.setUTCDate(eightAm.getUTCDate() - 1);
   }
-  return shiftFromTargetTz(start);
+  return eightAm;
 };
 
 const nowDateTime = () => new Date();
 
 const getRangeTimestamps = (rangeKey) => {
-  const now = shiftToTargetTz(new Date());
-  const start = new Date(now);
-  start.setUTCHours(0, 0, 0, 0);
+  const { year, month, day, weekday, offset } = getTargetDateInfo();
+  let start = buildTargetDate(year, month, day, offset);
 
   if (rangeKey === "week") {
-    const day = start.getUTCDay() || 7;
-    start.setUTCDate(start.getUTCDate() - day + 1);
+    const diff = weekday === 0 ? 6 : weekday - 1; // Monday as start of week
+    start.setUTCDate(start.getUTCDate() - diff);
   } else if (rangeKey === "month") {
-    start.setUTCDate(1);
+    start = buildTargetDate(year, month, "01", offset);
   } else if (rangeKey !== "today") {
     return { start_ts: undefined, end_ts: undefined };
   }
