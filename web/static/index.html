@@ -267,6 +267,7 @@
       font-weight: 600;
       color: #e2e8f0;
       font-size: 14px;
+      white-space: nowrap;
     }
 
     .settings-block .field input,
@@ -516,12 +517,12 @@
           <div class="settings-block">
             <h4>感谢规则</h4>
             <div class="field inline">
-              <label class="inline"><input type="checkbox" id="thankGuardToggle" /> 感谢大航海</label>
+              <label class="inline">感谢大航海<input type="checkbox" id="thankGuardToggle" /></label>
             </div>
             <div class="field">
               <div class="inline">
-                <label class="inline"><input type="radio" name="thankMode" value="count" id="thankModeCount" checked />按数量</label>
-                <label class="inline"><input type="radio" name="thankMode" value="value" id="thankModeValue" />按价值</label>
+                <label class="inline">按数量<input type="radio" name="thankMode" value="count" id="thankModeCount" checked /></label>
+                <label class="inline">按价值<input type="radio" name="thankMode" value="value" id="thankModeValue" /></label>
               </div>
               <p class="hint" style="margin:4px 0 0;">两种机制只能选一个：按数量会累积同一天的礼物；按价值使用单次流水总价阈值。</p>
             </div>
@@ -570,7 +571,7 @@
           <div class="settings-block">
             <h4>定时弹幕</h4>
             <div class="field inline">
-              <label class="inline"><input type="checkbox" id="announceEnabledToggle" /> 开启定时弹幕</label>
+              <label class="inline">开启定时弹幕<input type="checkbox" id="announceEnabledToggle" /></label>
               <label class="inline">间隔（秒）<input id="announceIntervalInput" type="number" min="30" value="300" style="max-width:120px;" /></label>
             </div>
             <div class="field">
@@ -579,7 +580,7 @@
               </label>
             </div>
             <div class="field inline">
-              <label class="inline"><input type="checkbox" id="announceSkipOfflineToggle" checked /> 未开播时不发</label>
+              <label class="inline">未开播时不发<input type="checkbox" id="announceSkipOfflineToggle" checked /></label>
             </div>
             <p class="hint">需要小号登录态才能发送，默认 5 分钟一次。</p>
           </div>
