@@ -10,10 +10,15 @@ def _reload_enabled() -> bool:
     return value in {"1", "true", "yes", "y"}
 
 
+def _server_port() -> int:
+    value = os.getenv("UVICORN_PORT") or os.getenv("PORT")
+    return int(value) if value else 3333
+
+
 if __name__ == "__main__":
     uvicorn.run(
         "web.app:app",
         host="0.0.0.0",
-        port=3333,
+        port=_server_port(),
         reload=_reload_enabled(),
     )
