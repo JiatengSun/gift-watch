@@ -60,8 +60,14 @@ python collector_bot.py --env-file .env.room1
 ```
 
 ### 4) 运行检索网页
+可以直接跑内置脚本：
 ```powershell
 python web_server.py
+```
+
+或者用 Uvicorn CLI 指定端口、Host 与环境文件（多实例/多端口场景）：
+```powershell
+uvicorn web.app:app --host 0.0.0.0 --port 5555 --env-file .env-xsz
 ```
 
 默认端口 `3333`：
@@ -69,7 +75,7 @@ python web_server.py
 
 前端会在所有 API 请求上追加 `?env=...`，与填写的 `.env` 路径绑定，后端会按对应配置加载数据库与房间。
 
-你可以用 VS Code 的 Port Forwarding 将 3333 共享给其他人查看。
+你可以用 VS Code 的 Port Forwarding 将 3333 共享给其他人查看；如果用自定义端口（如上例的 5555），按对应端口转发即可。
 
 ## 目录结构
 ```
