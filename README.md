@@ -47,8 +47,8 @@ copy .env.example .env
 - `THANK_PER_USER_DAILY`（默认 1，表示每个用户每天只感谢一次）
 - 小号的 `BOT_SESSDATA / BOT_BILI_JCT / BOT_BUVID3`
 
-感谢触发条件：礼物数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。
-当名字和 ID 同时配置时，两组规则会各自检查，满足任意一项即触发感谢（不会要求二者同时命中）。
+感谢触发条件：同一用户（按 B 站 uid）在同一天送出的目标礼物累计数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。
+当名字和 ID 同时配置时，两组规则会各自检查，满足任意一项即触发感谢（不会要求二者同时命中）。每天每位用户满足条件后只会感谢一次（受 `THANK_PER_USER_DAILY` 影响）。
 
 > 请不要泄露 Cookie。
 

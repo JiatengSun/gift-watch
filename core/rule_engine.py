@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable
 import unicodedata
+import time
 
 from core.gift_parser import GiftEvent
 
@@ -25,17 +26,8 @@ class GiftRule:
     target_gift_ids: set[int]
     min_num: int
 
-    def hit(self, gift: GiftEvent) -> bool:
-        """Return True when the gift meets quantity plus name/id matching rules.
-
-        - First enforce `min_num`; no matching occurs if 数量不足。
-        - 如果配置了名字列表，则对礼物名做 NFKC + 去空白 + casefold 后检查集合。
-        - 如果配置了 ID 列表，则直接检查礼物 ID 是否在集合中。
-        - 当名字和 ID 都配置时，两条检查独立进行，只要有任意一条命中即可触发
-          感谢（逻辑或）。
-        """
-        if gift.num < self.min_num:
-            return False
+    def is_target_gift(self, gift: GiftEvent) -> bool:
+        """Return True when the gift name or ID matches configured targets."""
 
         name_hit = False
         if self.target_gift_names:
@@ -48,6 +40,20 @@ class GiftRule:
 
         return name_hit or id_hit
 
+    def hit(self, gift: GiftEvent) -> bool:
+        """Return True when the gift meets quantity plus name/id matching rules.
+
+        - First enforce `min_num`; no matching occurs if 数量不足。
+        - 如果配置了名字列表，则对礼物名做 NFKC + 去空白 + casefold 后检查集合。
+        - 如果配置了 ID 列表，则直接检查礼物 ID 是否在集合中。
+        - 当名字和 ID 都配置时，两条检查独立进行，只要有任意一条命中即可触发
+          感谢（逻辑或）。
+        """
+        if gift.num < self.min_num:
+            return False
+
+        return self.is_target_gift(gift)
+
 
 def build_rule(
     target_gift_names: Iterable[str], target_gift_ids: Iterable[int], min_num: int
@@ -58,3 +64,26 @@ def build_rule(
         target_gift_ids=set([i for i in target_gift_ids if i]),
         min_num=min_num,
     )
+
+
+@dataclass
+class DailyGiftCounter:
+    """Track per-user gift totals within the same calendar day."""
+
+    _current_day: str | None = field(default=None, init=False)
+    _counts: Dict[Any, int] = field(default_factory=dict, init=False)
+
+    def _day_key(self, ts: float) -> str:
+        return time.strftime("%Y-%m-%d", time.localtime(ts))
+
+    def add(self, key: Any, amount: int, ts: float) -> tuple[str, int]:
+        """Add `amount` to the user's daily total and return (day, total)."""
+
+        day = self._day_key(ts)
+        if day != self._current_day:
+            self._current_day = day
+            self._counts = {}
+
+        total = self._counts.get(key, 0) + max(amount, 0)
+        self._counts[key] = total
+        return day, total
