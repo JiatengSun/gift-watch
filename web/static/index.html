@@ -543,7 +543,7 @@ const getRangeTimestamps = (rangeKey) => {
     return { start_ts: undefined, end_ts: undefined };
   }
 
-  return { start_ts: Math.floor(start.getTime() / 1000), end_ts: undefined };
+  return { start_ts: Math.floor(shiftFromTargetTz(start).getTime() / 1000), end_ts: undefined };
 };
 
 const buildUrl = (path, params) => {
