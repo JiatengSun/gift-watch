@@ -597,13 +597,18 @@
             </div>
             <div class="field">
               <label>定时发送内容
-                <textarea id="announceMessageInput" placeholder="定时问候语"></textarea>
+                <textarea id="announceMessageInput" placeholder="每行一条，自动轮播"></textarea>
               </label>
+              <div class="row" style="margin-top:6px; gap:8px; align-items: center; flex-wrap: wrap;">
+                <button type="button" id="announceCleanupBtn" class="ghost-btn" style="padding:8px 10px;">整理换行</button>
+                <span class="hint" id="announcePreviewHint">一行一条；支持逗号或换行分隔，点击“整理换行”自动拆分并去除空行。</span>
+              </div>
+              <div id="announcePreview" class="row" style="margin-top:8px; gap:6px; flex-wrap: wrap;"></div>
             </div>
             <div class="field inline">
               <label class="inline">未开播时不发<input type="checkbox" id="announceSkipOfflineToggle" checked /></label>
             </div>
-            <p class="hint">需要小号登录态才能发送，默认 5 分钟一次。</p>
+            <p class="hint">需要小号登录态才能发送，默认 5 分钟一次；多行内容会轮播发送。</p>
           </div>
         </div>
 
@@ -1076,6 +1081,45 @@ const updateThankModeVisibility = (mode) => {
   if (valueFields) valueFields.style.display = mode === "value" ? "block" : "none";
 };
 
+const parseAnnouncements = (value) =>
+  (value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+const tidyAnnouncements = (value) =>
+  (value || "")
+    .replace(/，/g, ",")
+    .split(/[\n,]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+const normalizeAnnouncements = (value) => tidyAnnouncements(value).join("\n");
+
+const updateAnnouncePreview = (rawValue) => {
+  const preview = document.getElementById("announcePreview");
+  const hint = document.getElementById("announcePreviewHint");
+  if (!preview || !hint) return;
+
+  const items = parseAnnouncements(rawValue);
+  preview.innerHTML = "";
+
+  if (!items.length) {
+    preview.innerHTML = '<span class="hint">暂无内容，填写后会按顺序轮播。</span>';
+    hint.textContent = "一行一条；支持逗号或换行分隔，点击“整理换行”自动拆分并去除空行。";
+    return;
+  }
+
+  items.forEach((msg, idx) => {
+    const pill = document.createElement("span");
+    pill.className = "badge";
+    pill.textContent = `${idx + 1}. ${msg}`;
+    preview.appendChild(pill);
+  });
+
+  hint.textContent = `共 ${items.length} 条，按顺序轮播；点击“整理换行”可快速分行。`;
+};
+
 const applySettingsToForm = (settings) => {
   document.getElementById("thankGuardToggle").checked = !!settings.thank_guard;
 
@@ -1096,7 +1140,9 @@ const applySettingsToForm = (settings) => {
 
   document.getElementById("announceEnabledToggle").checked = !!settings.announce_enabled;
   document.getElementById("announceIntervalInput").value = settings.announce_interval_sec ?? 300;
-  document.getElementById("announceMessageInput").value = settings.announce_message || "";
+  const announceText = settings.announce_message || "";
+  document.getElementById("announceMessageInput").value = announceText;
+  updateAnnouncePreview(announceText);
   document.getElementById("announceSkipOfflineToggle").checked = !!settings.announce_skip_offline;
 };
 
@@ -1134,7 +1180,7 @@ const collectSettingsFromForm = () => {
     },
     announce_enabled: document.getElementById("announceEnabledToggle").checked,
     announce_interval_sec: Math.max(toInt(document.getElementById("announceIntervalInput").value, 300), 30),
-    announce_message: document.getElementById("announceMessageInput").value,
+    announce_message: normalizeAnnouncements(document.getElementById("announceMessageInput").value),
     announce_skip_offline: document.getElementById("announceSkipOfflineToggle").checked,
   };
 };
@@ -1359,6 +1405,15 @@ const initView = (viewKey) => {
     document.getElementById("thankModeValue")?.addEventListener("change", () => updateThankModeVisibility("value"));
     document.getElementById("btnReloadSettings")?.addEventListener("click", loadSettings);
     document.getElementById("btnSaveSettings")?.addEventListener("click", saveSettings);
+    document.getElementById("announceMessageInput")?.addEventListener("input", (ev) => {
+      updateAnnouncePreview(ev.target.value);
+    });
+    document.getElementById("announceCleanupBtn")?.addEventListener("click", () => {
+      const input = document.getElementById("announceMessageInput");
+      if (!input) return;
+      input.value = normalizeAnnouncements(input.value);
+      updateAnnouncePreview(input.value);
+    });
     loadSettings();
     logConsole("控制台已就绪，可筛选或直接输入记录 ID 操作。", "info");
   } else {
