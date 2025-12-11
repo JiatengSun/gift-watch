@@ -97,16 +97,16 @@ def query_gifts_by_uname(
     guard_level: int | None = None,
 ) -> List[Tuple]:
     with get_conn(settings) as conn:
-        params = [uname]
-        where = "WHERE uname = ?"
-        clauses: list[str] = []
+        clauses: list[str] = ["room_id = ?", "uname = ?"]
+        params: list[object] = [settings.room_id, uname]
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
-        if clauses:
-            where += " AND " + " AND ".join(clauses)
 
         guard_clause, guard_params = _guard_level_clause(guard_level)
-        where += guard_clause
-        params.extend(guard_params)
+        if guard_clause:
+            clauses.append(guard_clause.removeprefix(" AND "))
+            params.extend(guard_params)
+
+        where = "WHERE " + " AND ".join(clauses)
 
         cur = conn.execute(
             f"""
@@ -131,16 +131,16 @@ def query_gifts_by_uname_and_gift(
     guard_level: int | None = None,
 ) -> List[Tuple]:
     with get_conn(settings) as conn:
-        params = [uname, gift_name]
-        where = "WHERE uname = ? AND gift_name = ?"
-        clauses: list[str] = []
+        clauses: list[str] = ["room_id = ?", "uname = ?", "gift_name = ?"]
+        params: list[object] = [settings.room_id, uname, gift_name]
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
-        if clauses:
-            where += " AND " + " AND ".join(clauses)
 
         guard_clause, guard_params = _guard_level_clause(guard_level)
-        where += guard_clause
-        params.extend(guard_params)
+        if guard_clause:
+            clauses.append(guard_clause.removeprefix(" AND "))
+            params.extend(guard_params)
+
+        where = "WHERE " + " AND ".join(clauses)
 
         cur = conn.execute(
             f"""
@@ -165,8 +165,8 @@ def query_recent_gifts(
     guard_level: int | None = None,
 ) -> List[Tuple]:
     with get_conn(settings) as conn:
-        clauses = []
-        params: list[object] = []
+        clauses = ["room_id = ?"]
+        params: list[object] = [settings.room_id]
 
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
         if uname:
@@ -204,27 +204,30 @@ def query_gift_by_id(settings: Settings, gift_id: int) -> Optional[Tuple]:
             """
             SELECT id, ts, uid, uname, gift_name, num, total_price
             FROM gifts
-            WHERE id = ?
+            WHERE id = ? AND room_id = ?
             LIMIT 1
             """,
-            (gift_id,),
+            (gift_id, settings.room_id),
         )
         return cur.fetchone()
 
 
 def delete_gift_by_id(settings: Settings, gift_id: int) -> bool:
     with get_conn(settings) as conn:
-        cur = conn.execute("DELETE FROM gifts WHERE id = ?", (gift_id,))
+        cur = conn.execute(
+            "DELETE FROM gifts WHERE id = ? AND room_id = ?", (gift_id, settings.room_id)
+        )
         return cur.rowcount > 0
 
 
 def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: int | None = None) -> dict[str, int]:
     with get_conn(settings) as conn:
-        clauses = []
+        clauses = ["room_id = ?"]
         params: list[object] = [
             GUARD_LEVEL_NAMES[3],
             GUARD_LEVEL_NAMES[2],
             GUARD_LEVEL_NAMES[1],
+            settings.room_id,
         ]
 
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
