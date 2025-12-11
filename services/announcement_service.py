@@ -25,10 +25,19 @@ class AnnouncementService:
             return True
 
         url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={settings.room_id}"
+        headers = {
+            # B 站接口如果没有常见浏览器 UA 会返回 412，补充请求头提升成功率。
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/127.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://live.bilibili.com/",
+        }
         timeout = aiohttp.ClientTimeout(total=5)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as resp:
+                async with session.get(url, headers=headers) as resp:
                     resp.raise_for_status()
                     payload = await resp.json()
         except Exception as exc:
