@@ -1,12 +1,16 @@
 import logging
 import os
 from dataclasses import dataclass
-from typing import List
-from dotenv import load_dotenv
+from typing import List, Mapping, MutableMapping
+from dotenv import dotenv_values, load_dotenv
 
 load_dotenv()
 
-def _get_env(key: str, default: str = "") -> str:
+def _get_env(key: str, default: str = "", env: Mapping[str, str | None] | None = None) -> str:
+    if env is not None and key in env:
+        value = env.get(key)
+        return value if value is not None else default
+
     v = os.getenv(key)
     return v if v is not None else default
 
@@ -46,14 +50,19 @@ class Settings:
 
     bili_client: str
 
-def get_settings() -> Settings:
-    room_id = int(_get_env("BILI_ROOM_ID", "1852633038"))
-    target_gifts = _split_csv(_get_env("TARGET_GIFTS", "人气票"))
-    target_gift_ids = _split_csv_ints(_get_env("TARGET_GIFT_IDS", ""))
-    target_min_num = int(_get_env("TARGET_MIN_NUM", "50"))
+
+def get_settings(env_file: str | None = None) -> Settings:
+    env: MutableMapping[str, str | None] | None = None
+    if env_file:
+        env = dotenv_values(env_file)
+
+    room_id = int(_get_env("BILI_ROOM_ID", "1852633038", env))
+    target_gifts = _split_csv(_get_env("TARGET_GIFTS", "人气票", env))
+    target_gift_ids = _split_csv_ints(_get_env("TARGET_GIFT_IDS", "", env))
+    target_min_num = int(_get_env("TARGET_MIN_NUM", "50", env))
 
     def _get_log_level() -> int:
-        level_name = _get_env("LOG_LEVEL", "INFO").strip().upper()
+        level_name = _get_env("LOG_LEVEL", "INFO", env).strip().upper()
         # Prefer explicit numeric levels when provided (e.g. 10, 20).
         if level_name.isdigit():
             return int(level_name)
@@ -70,15 +79,15 @@ def get_settings() -> Settings:
         target_min_num=target_min_num,
         log_level=_get_log_level(),
 
-        bot_sessdata=_get_env("BOT_SESSDATA", ""),
-        bot_bili_jct=_get_env("BOT_BILI_JCT", ""),
-        bot_buvid3=_get_env("BOT_BUVID3", ""),
+        bot_sessdata=_get_env("BOT_SESSDATA", "", env),
+        bot_bili_jct=_get_env("BOT_BILI_JCT", "", env),
+        bot_buvid3=_get_env("BOT_BUVID3", "", env),
 
-        db_path=_get_env("DB_PATH", "gifts.db"),
+        db_path=_get_env("DB_PATH", "gifts.db", env),
 
-        thank_global_cooldown_sec=int(_get_env("THANK_GLOBAL_COOLDOWN_SEC", "10")),
-        thank_per_user_cooldown_sec=int(_get_env("THANK_PER_USER_COOLDOWN_SEC", "60")),
-        thank_per_user_daily=_get_env("THANK_PER_USER_DAILY", "1") == "1",
+        thank_global_cooldown_sec=int(_get_env("THANK_GLOBAL_COOLDOWN_SEC", "10", env)),
+        thank_per_user_cooldown_sec=int(_get_env("THANK_PER_USER_COOLDOWN_SEC", "60", env)),
+        thank_per_user_daily=_get_env("THANK_PER_USER_DAILY", "1", env) == "1",
 
-        bili_client=_get_env("BILI_CLIENT", "aiohttp"),
+        bili_client=_get_env("BILI_CLIENT", "aiohttp", env),
     )

@@ -30,8 +30,9 @@ def search(
     gift_name: str | None = Query(None, description="礼物名"),
     limit: int = Query(200, ge=1, le=1000),
     start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings()
+    settings = get_settings(env)
     now = datetime.now()
     effective_start_ts = start_ts if start_ts is not None else _default_start_ts(now)
     end_ts = int(now.timestamp())
@@ -64,8 +65,9 @@ def list_gifts(
     end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
     uname: str | None = Query(None, description="用户名"),
     gift_name: str | None = Query(None, description="礼物名"),
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings()
+    settings = get_settings(env)
     rows = query_recent_gifts(
         settings,
         limit=limit,
@@ -90,8 +92,8 @@ def list_gifts(
 
 
 @router.get("/api/gifts/{gift_id}")
-def get_gift(gift_id: int):
-    settings = get_settings()
+def get_gift(gift_id: int, env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端")):
+    settings = get_settings(env)
     row = query_gift_by_id(settings, gift_id)
     if not row:
         raise HTTPException(status_code=404, detail="记录不存在")
@@ -108,8 +110,8 @@ def get_gift(gift_id: int):
 
 
 @router.delete("/api/gifts/{gift_id}")
-def delete_gift(gift_id: int):
-    settings = get_settings()
+def delete_gift(gift_id: int, env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端")):
+    settings = get_settings(env)
     deleted = delete_gift_by_id(settings, gift_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="记录不存在或已删除")
@@ -117,8 +119,8 @@ def delete_gift(gift_id: int):
 
 
 @router.get("/api/room_gift_list")
-def room_gift_list():
-    settings = get_settings()
+def room_gift_list(env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端")):
+    settings = get_settings(env)
     return fetch_room_gift_list(settings)
 
 
@@ -126,8 +128,9 @@ def room_gift_list():
 def check(
     uname: str = Query(...),
     gift_name: str = Query(...),
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings()
+    settings = get_settings(env)
     rows = query_gifts_by_uname_and_gift(settings, uname=uname, gift_name=gift_name, limit=1)
     if not rows:
         return {"found": False, "latest": None}

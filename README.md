@@ -47,14 +47,15 @@ copy .env.example .env
 - `THANK_PER_USER_DAILY`（默认 1，表示每个用户每天只感谢一次）
 - 小号的 `BOT_SESSDATA / BOT_BILI_JCT / BOT_BUVID3`
 
-感谢触发条件：礼物数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。
-当名字和 ID 同时配置时，两组规则会各自检查，满足任意一项即触发感谢（不会要求二者同时命中）。
+感谢触发条件：同一用户（按 B 站 uid）在同一天送出的目标礼物累计数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。
+当名字和 ID 同时配置时，两组规则会各自检查，满足任意一项即触发感谢（不会要求二者同时命中）。每天每位用户满足条件后只会感谢一次（受 `THANK_PER_USER_DAILY` 影响）。
 
 > 请不要泄露 Cookie。
 
 ### 3) 运行监听 + 自动感谢
+可指定独立的 `.env`，方便多实例运行：
 ```powershell
-python collector_bot.py
+python collector_bot.py --env-file .env.room1
 ```
 
 ### 4) 运行检索网页
@@ -64,6 +65,8 @@ python web_server.py
 
 默认端口 `3333`：
 - 浏览器打开 `http://127.0.0.1:3333`
+
+前端会在所有 API 请求上追加 `?env=...`，与填写的 `.env` 路径绑定，后端会按对应配置加载数据库与房间。
 
 你可以用 VS Code 的 Port Forwarding 将 3333 共享给其他人查看。
 
