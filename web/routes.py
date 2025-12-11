@@ -11,6 +11,7 @@ from db.repo import (
     query_gifts_by_uname,
     query_gifts_by_uname_and_gift,
     query_recent_gifts,
+    query_flow_summary,
 )
 from services.gift_list_service import fetch_room_gift_list
 
@@ -28,6 +29,7 @@ def _default_start_ts(now: datetime) -> int:
 def search(
     uname: str = Query(..., description="用户名"),
     gift_name: str | None = Query(None, description="礼物名"),
+    guard_level: int | None = Query(None, ge=1, le=3, description="大航海等级：1=总督 2=提督 3=舰长"),
     limit: int = Query(200, ge=1, le=1000),
     start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
@@ -39,10 +41,18 @@ def search(
 
     if gift_name:
         rows = query_gifts_by_uname_and_gift(
-            settings, uname=uname, gift_name=gift_name, limit=limit, start_ts=effective_start_ts, end_ts=end_ts
+            settings,
+            uname=uname,
+            gift_name=gift_name,
+            limit=limit,
+            start_ts=effective_start_ts,
+            end_ts=end_ts,
+            guard_level=guard_level,
         )
     else:
-        rows = query_gifts_by_uname(settings, uname=uname, limit=limit, start_ts=effective_start_ts, end_ts=end_ts)
+        rows = query_gifts_by_uname(
+            settings, uname=uname, limit=limit, start_ts=effective_start_ts, end_ts=end_ts, guard_level=guard_level
+        )
 
     return [
         {
@@ -65,6 +75,7 @@ def list_gifts(
     end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
     uname: str | None = Query(None, description="用户名"),
     gift_name: str | None = Query(None, description="礼物名"),
+    guard_level: int | None = Query(None, ge=1, le=3, description="大航海等级：1=总督 2=提督 3=舰长"),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
     settings = get_settings(env)
@@ -75,6 +86,7 @@ def list_gifts(
         end_ts=end_ts,
         uname=uname,
         gift_name=gift_name,
+        guard_level=guard_level,
     )
 
     return [
@@ -122,6 +134,16 @@ def delete_gift(gift_id: int, env: str | None = Query(None, description="可选 
 def room_gift_list(env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端")):
     settings = get_settings(env)
     return fetch_room_gift_list(settings)
+
+
+@router.get("/api/summary")
+def summary(
+    start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
+    end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
+):
+    settings = get_settings(env)
+    return query_flow_summary(settings, start_ts=start_ts, end_ts=end_ts)
 
 
 @router.get("/api/check")

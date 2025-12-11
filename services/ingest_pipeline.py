@@ -7,7 +7,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from config.settings import Settings
-from core.gift_parser import parse_send_gift, GiftEvent, SUPPORTED_GIFT_CMDS
+from core.gift_parser import (
+    GiftEvent,
+    SUPPORTED_GIFT_CMDS,
+    parse_guard_buy,
+    parse_send_gift,
+)
 from db.repo import insert_gift
 from core.rule_engine import DailyGiftCounter, GiftRule
 from core.rate_limiter import RateLimiter
@@ -60,7 +65,11 @@ class IngestPipeline:
             return
         if cmd and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("收到事件 cmd=%s keys=%s", cmd, list(event.keys()))
-        gift = parse_send_gift(event, room_id=self.settings.room_id)
+        gift: Optional[GiftEvent]
+        if cmd == "GUARD_BUY":
+            gift = parse_guard_buy(event, room_id=self.settings.room_id)
+        else:
+            gift = parse_send_gift(event, room_id=self.settings.room_id)
         if gift is None:
             if cmd == "SEND_GIFT":
                 self.logger.warning("收到 SEND_GIFT 但无法解析，原始事件: %s", event)

@@ -120,7 +120,7 @@ class CollectorService:
         3. 若所有方式均失败，抛出异常提示配置/版本问题。
         """
         bound = False
-        for event_name in ("SEND_GIFT", "COMBO_SEND"):
+        for event_name in ("SEND_GIFT", "COMBO_SEND", "GUARD_BUY"):
             bound = self._bind(event_name, handler) or bound
 
         if bound:

@@ -166,6 +166,13 @@
       flex-wrap: wrap;
     }
 
+    .range-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .toggle-btn {
       background: transparent;
       border: 1px solid var(--border);
@@ -267,7 +274,19 @@
     <div class="hero">
       <div class="hero-left">
         <div class="hero-title">Gift Watch <span class="pill">实时礼物监控</span></div>
-        <p class="hint">桌面版保留全部功能，手机 / 平板版仅保留搜索与全部清单，方便触摸操作。金额已按电池价值折算（1 电池=¥0.1）。</p>
+        <div class="range-toggle" aria-label="时间范围切换">
+          <button class="toggle-btn active" data-range="today">今日</button>
+          <button class="toggle-btn" data-range="week">本周</button>
+          <button class="toggle-btn" data-range="month">本月</button>
+          <button class="toggle-btn" data-range="all">全部</button>
+        </div>
+      </div>
+      <div class="flow-chip" aria-live="polite" id="guardFlowChip">
+        <div class="flex-between" style="gap:10px; align-items:center;">
+          <span class="muted" style="font-weight:600;">大航海购买</span>
+          <span class="badge" id="guardFlowMeta">舰长：- ｜ 提督：- ｜ 总督：-</span>
+        </div>
+        <div class="flow-value" id="guardFlowValue">-</div>
       </div>
       <div class="flow-chip" aria-live="polite">
         <div class="flex-between" style="gap:10px; align-items:center;">
@@ -306,6 +325,12 @@
           <div class="row">
             <input id="uname-desktop" placeholder="用户名（精确匹配）" />
             <input id="gift-desktop" placeholder="礼物名（可选）" />
+            <select id="guardLevel-desktop" aria-label="大航海等级">
+              <option value="">全部大航海</option>
+              <option value="3">舰长</option>
+              <option value="2">提督</option>
+              <option value="1">总督</option>
+            </select>
             <input id="startTime-desktop" type="datetime-local" aria-label="开始时间" />
             <input id="limit-desktop" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
             <button id="btnSearch-desktop">搜索</button>
@@ -349,6 +374,12 @@
         <div class="row">
           <input id="uname-mobile" placeholder="用户名（精确匹配）" />
           <input id="gift-mobile" placeholder="礼物名（可选）" />
+          <select id="guardLevel-mobile" aria-label="大航海等级">
+            <option value="">全部大航海</option>
+            <option value="3">舰长</option>
+            <option value="2">提督</option>
+            <option value="1">总督</option>
+          </select>
           <input id="startTime-mobile" type="datetime-local" aria-label="开始时间" />
           <input id="limit-mobile" type="number" min="1" max="500" value="150" aria-label="返回条数" />
           <button id="btnSearch-mobile">搜索</button>
@@ -384,6 +415,14 @@
           <label>结束时间<input id="consoleEnd" type="datetime-local" aria-label="结束时间" /></label>
           <label>用户名（可选）<input id="consoleUname" placeholder="精确匹配" /></label>
           <label>礼物名（可选）<input id="consoleGift" placeholder="精确匹配" /></label>
+          <label>大航海（可选）
+            <select id="consoleGuardLevel" aria-label="大航海等级">
+              <option value="">全部</option>
+              <option value="3">舰长</option>
+              <option value="2">提督</option>
+              <option value="1">总督</option>
+            </select>
+          </label>
           <label>条数限制<input id="consoleLimit" type="number" min="1" max="1000" value="200" aria-label="返回条数" /></label>
           <label>记录 ID（用于单独操作）<input id="consoleRecordId" type="number" min="1" placeholder="记录 ID" aria-label="记录 ID" /></label>
         </div>
@@ -410,6 +449,12 @@
           <div class="row">
             <input id="uname-tablet" placeholder="用户名（精确匹配）" />
             <input id="gift-tablet" placeholder="礼物名（可选）" />
+            <select id="guardLevel-tablet" aria-label="大航海等级">
+              <option value="">全部大航海</option>
+              <option value="3">舰长</option>
+              <option value="2">提督</option>
+              <option value="1">总督</option>
+            </select>
             <input id="startTime-tablet" type="datetime-local" aria-label="开始时间" />
             <input id="limit-tablet" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
             <button id="btnSearch-tablet">搜索</button>
@@ -467,6 +512,23 @@ const defaultStartDate = () => {
 };
 
 const nowDateTime = () => new Date();
+
+const getRangeTimestamps = (rangeKey) => {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
+  if (rangeKey === "week") {
+    const day = start.getDay() || 7;
+    start.setDate(start.getDate() - day + 1);
+  } else if (rangeKey === "month") {
+    start.setDate(1);
+  } else if (rangeKey !== "today") {
+    return { start_ts: undefined, end_ts: undefined };
+  }
+
+  return { start_ts: Math.floor(start.getTime() / 1000), end_ts: undefined };
+};
 
 const getEnvFile = () => (document.getElementById("envFile")?.value || "").trim();
 const buildUrl = (path, params) => {
@@ -526,13 +588,20 @@ const groupByUser = (records) => {
 };
 
 let activeView = "desktop";
+let activeRange = "today";
 
 const viewConfigs = {
   desktop: {
     root: document.getElementById("view-desktop"),
     search: {
       button: "btnSearch-desktop",
-      inputs: { uname: "uname-desktop", gift: "gift-desktop", start: "startTime-desktop", limit: "limit-desktop" },
+      inputs: {
+        uname: "uname-desktop",
+        gift: "gift-desktop",
+        guardLevel: "guardLevel-desktop",
+        start: "startTime-desktop",
+        limit: "limit-desktop",
+      },
       outputs: { summary: "searchSummary-desktop", aggregated: "searchAggregated-desktop", raw: "searchRaw-desktop" },
     },
     latest: { button: "btnLoadAll-desktop", limit: "allLimit-desktop", output: "allOut-desktop" },
@@ -542,7 +611,13 @@ const viewConfigs = {
     root: document.getElementById("view-mobile"),
     search: {
       button: "btnSearch-mobile",
-      inputs: { uname: "uname-mobile", gift: "gift-mobile", start: "startTime-mobile", limit: "limit-mobile" },
+      inputs: {
+        uname: "uname-mobile",
+        gift: "gift-mobile",
+        guardLevel: "guardLevel-mobile",
+        start: "startTime-mobile",
+        limit: "limit-mobile",
+      },
       outputs: { summary: "searchSummary-mobile", aggregated: "searchAggregated-mobile", raw: "searchRaw-mobile" },
     },
     latest: { button: "btnLoadAll-mobile", limit: "allLimit-mobile", output: "allOut-mobile" },
@@ -551,7 +626,13 @@ const viewConfigs = {
     root: document.getElementById("view-tablet"),
     search: {
       button: "btnSearch-tablet",
-      inputs: { uname: "uname-tablet", gift: "gift-tablet", start: "startTime-tablet", limit: "limit-tablet" },
+      inputs: {
+        uname: "uname-tablet",
+        gift: "gift-tablet",
+        guardLevel: "guardLevel-tablet",
+        start: "startTime-tablet",
+        limit: "limit-tablet",
+      },
       outputs: { summary: "searchSummary-tablet", aggregated: "searchAggregated-tablet", raw: "searchRaw-tablet" },
     },
     latest: { button: "btnLoadAll-tablet", limit: "allLimit-tablet", output: "allOut-tablet" },
@@ -692,16 +773,60 @@ const getDateInputSeconds = (id) => {
   return Number.isNaN(parsed) ? undefined : parsed;
 };
 
-const updateTotalFlow = (records) => {
+const updateTotalFlow = (data) => {
   const valueEl = document.getElementById("totalFlowValue");
   const metaEl = document.getElementById("totalFlowMeta");
   if (!valueEl || !metaEl) return;
 
-  const totalPrice = records.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
-  const totalNum = records.reduce((acc, r) => acc + (Number(r.num) || 0), 0);
+  let totalPrice = 0;
+  let totalNum = 0;
+  let recordCount = 0;
+
+  if (Array.isArray(data)) {
+    recordCount = data.length;
+    totalPrice = data.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
+    totalNum = data.reduce((acc, r) => acc + (Number(r.num) || 0), 0);
+  } else if (data) {
+    recordCount = Number(data.record_count ?? data.length ?? 0) || 0;
+    totalPrice = Number(data.total_price ?? 0) || 0;
+    totalNum = Number(data.total_num ?? 0) || 0;
+  }
 
   valueEl.textContent = `¥${fmtCurrency(totalPrice)}`;
-  metaEl.textContent = `记录：${fmtNumber(records.length)} ｜ 数量：${fmtNumber(totalNum)}`;
+  metaEl.textContent = `记录：${fmtNumber(recordCount)} ｜ 数量：${fmtNumber(totalNum)}`;
+};
+
+const updateGuardFlow = (guardStats) => {
+  const valueEl = document.getElementById("guardFlowValue");
+  const metaEl = document.getElementById("guardFlowMeta");
+  if (!valueEl || !metaEl) return;
+
+  const captain = Number(guardStats?.captain ?? 0) || 0;
+  const admiral = Number(guardStats?.admiral ?? 0) || 0;
+  const governor = Number(guardStats?.governor ?? 0) || 0;
+  const total = captain + admiral + governor;
+
+  valueEl.textContent = `总计 ${fmtNumber(total)} 单大航海`;
+  metaEl.textContent = `舰长：${fmtNumber(captain)} ｜ 提督：${fmtNumber(admiral)} ｜ 总督：${fmtNumber(governor)}`;
+};
+
+const refreshSummary = async () => {
+  const params = new URLSearchParams();
+  const { start_ts, end_ts } = getRangeTimestamps(activeRange);
+  if (start_ts) params.set("start_ts", String(start_ts));
+  if (end_ts) params.set("end_ts", String(end_ts));
+
+  try {
+    const resp = await fetch(buildUrl("/api/summary", params));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    updateTotalFlow(data);
+    updateGuardFlow(data.guard);
+  } catch (err) {
+    console.error("加载汇总数据失败", err);
+  }
 };
 
 const updateConsoleSummary = (records) => {
@@ -774,6 +899,7 @@ async function search(viewKey) {
   const inputs = cfg.search.inputs;
   const uname = getInputValue(inputs.uname);
   const gift = getInputValue(inputs.gift);
+  const guardLevel = parseInt(getInputValue(inputs.guardLevel) || "", 10);
   const limit = parseInt(document.getElementById(inputs.limit)?.value || "0", 10) || 200;
   const startInput = document.getElementById(inputs.start);
   const startValue = startInput?.value;
@@ -787,6 +913,7 @@ async function search(viewKey) {
 
   const params = new URLSearchParams({ uname, limit: String(limit) });
   if (gift) params.set("gift_name", gift);
+  if (guardLevel) params.set("guard_level", String(guardLevel));
   if (start_ts) params.set("start_ts", String(start_ts));
 
   const resp = await fetch(buildUrl("/api/search", params));
@@ -803,11 +930,13 @@ const buildConsoleParams = () => {
   const end = getDateInputSeconds("consoleEnd");
   const uname = getInputValue("consoleUname");
   const gift = getInputValue("consoleGift");
+  const guardLevel = parseInt(getInputValue("consoleGuardLevel") || "", 10);
 
   if (start) params.set("start_ts", String(start));
   if (end) params.set("end_ts", String(end));
   if (uname) params.set("uname", uname);
   if (gift) params.set("gift_name", gift);
+  if (guardLevel) params.set("guard_level", String(guardLevel));
 
   return params;
 };
@@ -818,14 +947,13 @@ const loadConsoleRecords = async () => {
   const resp = await fetch(buildUrl("/api/gifts", params));
   const data = await resp.json();
   renderConsoleRecords(data);
-  updateTotalFlow(data);
   viewState.console.loadedAll = true;
 };
 
 const resetConsoleFilters = () => {
   setDefaultStartTime("consoleStart");
   setNowTime("consoleEnd");
-  const optionalIds = ["consoleUname", "consoleGift", "consoleRecordId"];
+  const optionalIds = ["consoleUname", "consoleGift", "consoleRecordId", "consoleGuardLevel"];
   optionalIds.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
@@ -853,7 +981,6 @@ async function loadAll(viewKey) {
     ],
     "暂无礼物流水"
   );
-  updateTotalFlow(data);
   viewState[viewKey].loadedAll = true;
 }
 
@@ -915,7 +1042,7 @@ const switchView = (target) => {
   Object.entries(viewConfigs).forEach(([key, cfg]) => {
     cfg.root.classList.toggle("active", key === target);
   });
-  document.querySelectorAll(".toggle-btn").forEach((btn) => {
+  document.querySelectorAll("[data-view-target]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.viewTarget === target);
   });
 
@@ -940,8 +1067,23 @@ document.querySelectorAll("[data-view-target]").forEach((btn) => {
   btn.addEventListener("click", () => switchView(btn.dataset.viewTarget));
 });
 
+document.querySelectorAll("[data-range]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const targetRange = btn.dataset.range;
+    if (!targetRange) return;
+    activeRange = targetRange;
+    document
+      .querySelectorAll("[data-range]")
+      .forEach((item) => item.classList.toggle("active", item.dataset.range === activeRange));
+    refreshSummary();
+  });
+});
+
+document.getElementById("envFile")?.addEventListener("change", refreshSummary);
+
 initView("desktop");
 switchView("desktop");
+refreshSummary();
 </script>
 </body>
 </html>
