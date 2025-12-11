@@ -14,3 +14,5 @@ CREATE TABLE IF NOT EXISTS gifts (
 CREATE INDEX IF NOT EXISTS idx_gifts_uname ON gifts(uname);
 CREATE INDEX IF NOT EXISTS idx_gifts_gift  ON gifts(gift_name);
 CREATE INDEX IF NOT EXISTS idx_gifts_ts    ON gifts(ts);
+CREATE INDEX IF NOT EXISTS idx_gifts_room  ON gifts(room_id);
+CREATE INDEX IF NOT EXISTS idx_gifts_room_ts ON gifts(room_id, ts);
