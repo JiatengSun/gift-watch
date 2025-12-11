@@ -526,12 +526,17 @@ const logConsole = (message, type = "info") => {
   log.prepend(line);
 };
 
+const getTargetNow = (offsetMinutes) => {
+  const now = new Date();
+  const utcMillis = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+  return new Date(utcMillis + offsetMinutes * 60 * 1000);
+};
+
 const defaultStartDate = () => {
   const info = getTargetDateInfo();
   const eightAm = buildTargetDate(info.year, info.month, info.day, info.offsetMinutes);
   eightAm.setUTCHours(eightAm.getUTCHours() + 8);
-  const now = new Date();
-  const nowInTarget = new Date(now.toLocaleString("en-US", { timeZone: TARGET_TIMEZONE }));
+  const nowInTarget = getTargetNow(info.offsetMinutes);
   if (eightAm > nowInTarget) {
     eightAm.setUTCDate(eightAm.getUTCDate() - 1);
   }
@@ -542,7 +547,7 @@ const nowDateTime = () => new Date();
 
 const getRangeTimestamps = (rangeKey) => {
   const { year, month, day, weekday, offsetMinutes } = getTargetDateInfo();
-  const targetNow = new Date(new Date().toLocaleString("en-US", { timeZone: TARGET_TIMEZONE }));
+  const targetNow = getTargetNow(offsetMinutes);
   let start = buildTargetDate(year, month, day, offsetMinutes);
 
   if (rangeKey === "week") {
