@@ -108,7 +108,7 @@
 
     label { font-weight: 600; }
 
-    input, button, select {
+    input, button, select, textarea {
       padding: 10px 12px;
       border-radius: 10px;
       border: 1px solid var(--border);
@@ -117,7 +117,22 @@
       font-size: 14px;
     }
 
-    input:focus, button:focus, select:focus {
+    input[type="checkbox"],
+    input[type="radio"] {
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      border-radius: 6px;
+      flex-shrink: 0;
+      accent-color: #38bdf8;
+    }
+
+    textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+
+    input:focus, button:focus, select:focus, textarea:focus {
       outline: 2px solid rgba(56, 189, 248, 0.5);
       outline-offset: 1px;
     }
@@ -197,6 +212,71 @@
       gap: 10px;
       margin: 10px 0 4px;
       align-items: center;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin: 10px 0 6px;
+    }
+
+    .settings-block {
+      border: 1px dashed var(--border);
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(148, 163, 184, 0.04);
+    }
+
+    .settings-block h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .settings-block label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .inline {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .settings-block .inline {
+      align-items: center;
+    }
+
+    .settings-block label.inline {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+
+    .settings-block .field input,
+    .settings-block .field textarea,
+    .settings-block .field select {
+      width: 100%;
+    }
+
+    .muted small {
+      color: inherit;
     }
 
     .filter-grid label {
@@ -425,6 +505,92 @@
         <div id="consoleList"></div>
         <div id="consoleLog" class="console-log" aria-live="polite" style="margin-top:12px;"></div>
       </div>
+
+      <div class="card console-card">
+        <div class="section-header">
+          <h2>感谢与定时弹幕配置</h2>
+          <span class="muted">保存后会写入当前后端使用的 .env</span>
+        </div>
+
+        <div class="settings-grid">
+          <div class="settings-block">
+            <h4>感谢规则</h4>
+            <div class="field inline">
+              <label class="inline"><input type="checkbox" id="thankGuardToggle" /> 感谢大航海</label>
+            </div>
+            <div class="field">
+              <div class="inline">
+                <label class="inline"><input type="radio" name="thankMode" value="count" id="thankModeCount" checked />按数量</label>
+                <label class="inline"><input type="radio" name="thankMode" value="value" id="thankModeValue" />按价值</label>
+              </div>
+              <p class="hint" style="margin:4px 0 0;">两种机制只能选一个：按数量会累积同一天的礼物；按价值使用单次流水总价阈值。</p>
+            </div>
+
+            <div id="countModeFields">
+              <div class="field">
+                <label>感谢的礼物名（逗号分隔）<input id="targetGiftsInput" placeholder="例如：人气票, 辣条" /></label>
+              </div>
+              <div class="field">
+                <label>感谢的礼物 ID（逗号分隔）<input id="targetGiftIdsInput" placeholder="可选，数字" /></label>
+              </div>
+              <div class="field inline">
+                <label class="inline">最低礼物数量<input id="targetMinNumInput" type="number" min="1" value="50" style="max-width:120px;" /></label>
+                <label class="inline">单用户每日感谢次数<input id="dailyThanksLimitInput" type="number" min="0" value="0" style="max-width:140px;" /></label>
+              </div>
+            </div>
+
+            <div id="valueModeFields" style="display:none;">
+              <div class="field">
+                <label>单次总价值阈值（单位：金瓜子）<input id="valueThresholdInput" type="number" min="0" value="0" /></label>
+                <p class="hint">单次流水达到该金额就感谢；留空或 0 表示关闭。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-block">
+            <h4>感谢弹幕模板</h4>
+            <div class="field">
+              <label>汇总感谢
+                <textarea id="summaryTemplateInput" placeholder="谢谢 {uname} 送的 {gifts}！太帅了！"></textarea>
+              </label>
+            </div>
+            <div class="field">
+              <label>单个礼物
+                <textarea id="singleTemplateInput" placeholder="谢谢 {uname} 送的 {gift_name} x{num}！"></textarea>
+              </label>
+            </div>
+            <div class="field">
+              <label>大航海
+                <textarea id="guardTemplateInput" placeholder="感谢{uname}的{guard_name}！！你最帅了！"></textarea>
+              </label>
+            </div>
+            <p class="hint">支持占位符：{uname} / {gift_name} / {num} / {gifts} / {guard_name}</p>
+          </div>
+
+          <div class="settings-block">
+            <h4>定时弹幕</h4>
+            <div class="field inline">
+              <label class="inline"><input type="checkbox" id="announceEnabledToggle" /> 开启定时弹幕</label>
+              <label class="inline">间隔（秒）<input id="announceIntervalInput" type="number" min="30" value="300" style="max-width:120px;" /></label>
+            </div>
+            <div class="field">
+              <label>定时发送内容
+                <textarea id="announceMessageInput" placeholder="定时问候语"></textarea>
+              </label>
+            </div>
+            <div class="field inline">
+              <label class="inline"><input type="checkbox" id="announceSkipOfflineToggle" checked /> 未开播时不发</label>
+            </div>
+            <p class="hint">需要小号登录态才能发送，默认 5 分钟一次。</p>
+          </div>
+        </div>
+
+        <div class="row" style="justify-content: flex-end;">
+          <button id="btnReloadSettings" class="ghost-btn">重载 .env</button>
+          <button id="btnSaveSettings">保存到 .env</button>
+        </div>
+        <p class="hint" id="settingsStatus"></p>
+      </div>
     </div>
 
     <!-- 平板版：两列布局，无房间礼物清单 -->
@@ -524,6 +690,15 @@ const logConsole = (message, type = "info") => {
   line.className = `line ${type}`;
   line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
   log.prepend(line);
+};
+
+const setSettingsStatus = (message, tone = "info") => {
+  const status = document.getElementById("settingsStatus");
+  if (status) {
+    status.textContent = message || "";
+    status.style.color = tone === "error" ? "#f472b6" : "var(--muted)";
+  }
+  logConsole(message, tone);
 };
 
 const getTargetNow = (offsetMinutes) => {
@@ -671,7 +846,9 @@ const viewConfigs = {
   },
 };
 
-const viewState = Object.fromEntries(Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false }]));
+const viewState = Object.fromEntries(
+  Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false, settingsLoaded: false }])
+);
 
 const renderSearch = (records, targets) => {
   const summary = document.getElementById(targets.summary);
@@ -870,6 +1047,111 @@ const updateConsoleSummary = (records) => {
   el.textContent = `筛选到 ${fmtNumber(records.length)} 条，数量 ${fmtNumber(totalNum)}，金额 ¥${fmtCurrency(totalPrice)}`;
 };
 
+const updateThankModeVisibility = (mode) => {
+  const countFields = document.getElementById("countModeFields");
+  const valueFields = document.getElementById("valueModeFields");
+  if (countFields) countFields.style.display = mode === "value" ? "none" : "block";
+  if (valueFields) valueFields.style.display = mode === "value" ? "block" : "none";
+};
+
+const applySettingsToForm = (settings) => {
+  document.getElementById("thankGuardToggle").checked = !!settings.thank_guard;
+
+  const mode = settings.thank_mode === "value" ? "value" : "count";
+  const modeInput = document.getElementById(mode === "value" ? "thankModeValue" : "thankModeCount");
+  if (modeInput) modeInput.checked = true;
+  updateThankModeVisibility(mode);
+
+  document.getElementById("targetGiftsInput").value = (settings.target_gifts || []).join(", ");
+  document.getElementById("targetGiftIdsInput").value = (settings.target_gift_ids || []).join(", ");
+  document.getElementById("targetMinNumInput").value = settings.target_min_num ?? 50;
+  document.getElementById("dailyThanksLimitInput").value = settings.thank_per_user_daily_limit ?? 0;
+  document.getElementById("valueThresholdInput").value = settings.thank_value_threshold ?? 0;
+
+  document.getElementById("summaryTemplateInput").value = settings.thank_templates?.summary || "";
+  document.getElementById("singleTemplateInput").value = settings.thank_templates?.single || "";
+  document.getElementById("guardTemplateInput").value = settings.thank_templates?.guard || "";
+
+  document.getElementById("announceEnabledToggle").checked = !!settings.announce_enabled;
+  document.getElementById("announceIntervalInput").value = settings.announce_interval_sec ?? 300;
+  document.getElementById("announceMessageInput").value = settings.announce_message || "";
+  document.getElementById("announceSkipOfflineToggle").checked = !!settings.announce_skip_offline;
+};
+
+const collectSettingsFromForm = () => {
+  const thankMode = document.querySelector('input[name="thankMode"]:checked')?.value || "count";
+  const parseCsv = (value) =>
+    (value || "")
+      .replace(/，/g, ",")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  const targetGifts = parseCsv(document.getElementById("targetGiftsInput").value);
+  const targetGiftIds = parseCsv(document.getElementById("targetGiftIdsInput").value)
+    .map((v) => Number(v))
+    .filter((n) => !Number.isNaN(n));
+
+  const toInt = (value, fallback = 0) => {
+    const n = parseInt(value || "", 10);
+    return Number.isNaN(n) ? fallback : n;
+  };
+
+  return {
+    thank_guard: document.getElementById("thankGuardToggle").checked,
+    thank_mode: thankMode,
+    target_gifts: targetGifts,
+    target_gift_ids: targetGiftIds,
+    target_min_num: toInt(document.getElementById("targetMinNumInput").value, 1),
+    thank_per_user_daily_limit: toInt(document.getElementById("dailyThanksLimitInput").value, 0),
+    thank_value_threshold: toInt(document.getElementById("valueThresholdInput").value, 0),
+    thank_templates: {
+      summary: document.getElementById("summaryTemplateInput").value,
+      single: document.getElementById("singleTemplateInput").value,
+      guard: document.getElementById("guardTemplateInput").value,
+    },
+    announce_enabled: document.getElementById("announceEnabledToggle").checked,
+    announce_interval_sec: Math.max(toInt(document.getElementById("announceIntervalInput").value, 300), 30),
+    announce_message: document.getElementById("announceMessageInput").value,
+    announce_skip_offline: document.getElementById("announceSkipOfflineToggle").checked,
+  };
+};
+
+const loadSettings = async () => {
+  try {
+    const resp = await fetch(buildUrl("/api/settings"));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    applySettingsToForm(data);
+    viewState.console.settingsLoaded = true;
+    setSettingsStatus("已加载当前配置", "success");
+  } catch (err) {
+    setSettingsStatus(`加载配置失败：${err.message || err}`, "error");
+  }
+};
+
+const saveSettings = async () => {
+  const payload = collectSettingsFromForm();
+  try {
+    const resp = await fetch(buildUrl("/api/settings"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    applySettingsToForm(data);
+    setSettingsStatus("保存成功，已写入 .env", "success");
+    viewState.console.settingsLoaded = true;
+  } catch (err) {
+    setSettingsStatus(`保存失败：${err.message || err}`, "error");
+  }
+};
+
 const getConsoleRecordId = () => {
   const input = document.getElementById("consoleRecordId");
   if (!input) return null;
@@ -1051,6 +1333,11 @@ const initView = (viewKey) => {
     });
     document.getElementById("btnInspectRecord")?.addEventListener("click", () => inspectRecord());
     document.getElementById("btnDeleteRecord")?.addEventListener("click", () => deleteRecord());
+    document.getElementById("thankModeCount")?.addEventListener("change", () => updateThankModeVisibility("count"));
+    document.getElementById("thankModeValue")?.addEventListener("change", () => updateThankModeVisibility("value"));
+    document.getElementById("btnReloadSettings")?.addEventListener("click", loadSettings);
+    document.getElementById("btnSaveSettings")?.addEventListener("click", saveSettings);
+    loadSettings();
     logConsole("控制台已就绪，可筛选或直接输入记录 ID 操作。", "info");
   } else {
     if (cfg.search) {
@@ -1087,8 +1374,13 @@ const switchView = (target) => {
   if (target === "desktop" && !viewState.desktop.roomLoaded) {
     loadRoomGiftList();
   }
-  if (target === "console" && !viewState.console.loadedAll) {
-    loadConsoleRecords();
+  if (target === "console") {
+    if (!viewState.console.settingsLoaded) {
+      loadSettings();
+    }
+    if (!viewState.console.loadedAll) {
+      loadConsoleRecords();
+    }
   }
 };
 
