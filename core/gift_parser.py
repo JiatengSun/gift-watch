@@ -17,7 +17,64 @@ class GiftEvent:
     total_price: int
     raw_json: str
 
-SUPPORTED_GIFT_CMDS = {"SEND_GIFT", "COMBO_SEND"}
+GUARD_LEVEL_NAMES = {1: "总督", 2: "提督", 3: "舰长"}
+
+SUPPORTED_GIFT_CMDS = {"SEND_GIFT", "COMBO_SEND", "GUARD_BUY"}
+
+
+def _resolve_guard_name(guard_level: int) -> str:
+    return GUARD_LEVEL_NAMES.get(guard_level, "大航海")
+
+
+def parse_guard_buy(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
+    cmd = event.get("cmd") or event.get("command")
+    if cmd != "GUARD_BUY":
+        return None
+
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    try:
+        uid = int(data.get("uid") or 0)
+    except Exception:
+        uid = 0
+    uname = str(data.get("username") or data.get("uname") or "").strip()
+
+    try:
+        guard_level = int(data.get("guard_level") or data.get("gift_id") or 0)
+    except Exception:
+        guard_level = 0
+
+    gift_name = str(data.get("gift_name") or _resolve_guard_name(guard_level)).strip() or "大航海"
+
+    try:
+        num = int(data.get("num") or 1)
+    except Exception:
+        num = 1
+
+    try:
+        base_price = int(data.get("price") or 0)
+    except Exception:
+        base_price = 0
+
+    total_price = base_price * max(num, 1)
+
+    ts = int(data.get("start_time") or data.get("timestamp") or event.get("timestamp") or time.time())
+
+    raw_json = json.dumps(event, ensure_ascii=False)
+
+    if not uname or not gift_name:
+        return None
+
+    return GiftEvent(
+        ts=ts,
+        room_id=room_id,
+        uid=uid,
+        uname=uname,
+        gift_id=guard_level,
+        gift_name=gift_name,
+        num=num,
+        total_price=total_price,
+        raw_json=raw_json,
+    )
 
 
 def parse_send_gift(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
