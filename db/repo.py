@@ -221,7 +221,11 @@ def delete_gift_by_id(settings: Settings, gift_id: int) -> bool:
 def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: int | None = None) -> dict[str, int]:
     with get_conn(settings) as conn:
         clauses = []
-        params: list[object] = []
+        params: list[object] = [
+            GUARD_LEVEL_NAMES[3],
+            GUARD_LEVEL_NAMES[2],
+            GUARD_LEVEL_NAMES[1],
+        ]
 
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
 
@@ -241,7 +245,7 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             FROM gifts
             {where}
             """,
-            (*params, GUARD_LEVEL_NAMES[3], GUARD_LEVEL_NAMES[2], GUARD_LEVEL_NAMES[1]),
+            params,
         )
         row = cur.fetchone()
 
