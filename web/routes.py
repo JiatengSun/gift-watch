@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
 
-from config.settings import get_settings
+from config.env_store import save_env
+from config.settings import Settings, get_settings
 from db.repo import (
     delete_gift_by_id,
     query_gift_by_id,
@@ -16,6 +18,75 @@ from db.repo import (
 from services.gift_list_service import fetch_room_gift_list
 
 router = APIRouter()
+
+
+class ThankTemplatesPayload(BaseModel):
+    summary: str = Field(..., description="汇总感谢弹幕模板")
+    guard: str = Field(..., description="大航海感谢弹幕模板")
+    single: str = Field(..., description="单个礼物感谢弹幕模板")
+
+
+class SettingsPayload(BaseModel):
+    thank_guard: bool = Field(True, description="是否感谢大航海")
+    thank_mode: str = Field("count", description="感谢模式 count/value")
+    target_gifts: list[str] = Field(default_factory=list, description="目标礼物名")
+    target_gift_ids: list[int] = Field(default_factory=list, description="目标礼物 ID")
+    target_min_num: int = Field(1, ge=1, description="数量阈值")
+    thank_per_user_daily_limit: int = Field(0, ge=0, description="单日感谢次数上限，0 表示不限制")
+    thank_value_threshold: int = Field(0, ge=0, description="单次礼物总价阈值，单位金瓜子")
+    thank_templates: ThankTemplatesPayload
+    announce_enabled: bool = Field(False, description="定时弹幕是否启用")
+    announce_interval_sec: int = Field(300, ge=30, description="定时弹幕间隔秒")
+    announce_message: str = Field("", description="定时弹幕内容")
+    announce_skip_offline: bool = Field(True, description="未开播时是否跳过")
+
+    @field_validator("thank_mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        v = (v or "").lower()
+        return v if v in {"count", "value"} else "count"
+
+
+def _serialize_settings(settings: Settings) -> dict:
+    return {
+        "thank_guard": settings.thank_guard,
+        "thank_mode": settings.thank_mode,
+        "target_gifts": settings.target_gifts,
+        "target_gift_ids": settings.target_gift_ids,
+        "target_min_num": settings.target_min_num,
+        "thank_per_user_daily_limit": settings.thank_per_user_daily_limit,
+        "thank_value_threshold": settings.thank_value_threshold,
+        "thank_templates": {
+            "single": settings.thank_message_single,
+            "summary": settings.thank_message_summary,
+            "guard": settings.thank_message_guard,
+        },
+        "announce_enabled": settings.announce_enabled,
+        "announce_interval_sec": settings.announce_interval_sec,
+        "announce_message": settings.announce_message,
+        "announce_skip_offline": settings.announce_skip_offline,
+    }
+
+
+def _env_payload_from_settings(payload: SettingsPayload) -> dict[str, str]:
+    gifts = ",".join([g.strip() for g in payload.target_gifts if g.strip()])
+    gift_ids = ",".join([str(i) for i in payload.target_gift_ids if i])
+    return {
+        "TARGET_GIFTS": gifts,
+        "TARGET_GIFT_IDS": gift_ids,
+        "TARGET_MIN_NUM": str(max(payload.target_min_num, 1)),
+        "THANK_PER_USER_DAILY_LIMIT": str(max(payload.thank_per_user_daily_limit, 0)),
+        "THANK_MODE": payload.thank_mode,
+        "THANK_VALUE_THRESHOLD": str(max(payload.thank_value_threshold, 0)),
+        "THANK_GUARD": "1" if payload.thank_guard else "0",
+        "THANK_MESSAGE_SINGLE": payload.thank_templates.single,
+        "THANK_MESSAGE_SUMMARY": payload.thank_templates.summary,
+        "THANK_MESSAGE_GUARD": payload.thank_templates.guard,
+        "ANNOUNCE_ENABLED": "1" if payload.announce_enabled else "0",
+        "ANNOUNCE_INTERVAL_SEC": str(max(payload.announce_interval_sec, 30)),
+        "ANNOUNCE_MESSAGE": payload.announce_message,
+        "ANNOUNCE_SKIP_OFFLINE": "1" if payload.announce_skip_offline else "0",
+    }
 
 
 def _default_start_ts(now: datetime) -> int:
@@ -144,6 +215,23 @@ def summary(
 ):
     settings = get_settings(env)
     return query_flow_summary(settings, start_ts=start_ts, end_ts=end_ts)
+
+
+@router.get("/api/settings")
+def read_settings(env: str | None = Query(None, description="可选 .env 文件路径")):
+    settings = get_settings(env)
+    return _serialize_settings(settings)
+
+
+@router.post("/api/settings")
+def update_settings(
+    payload: SettingsPayload = Body(..., description="配置内容"),
+    env: str | None = Query(None, description="可选 .env 文件路径"),
+):
+    env_payload = _env_payload_from_settings(payload)
+    save_env(env_payload, env)
+    settings = get_settings(env)
+    return _serialize_settings(settings)
 
 
 @router.get("/api/check")
