@@ -470,10 +470,46 @@
   </div>
 
 <script>
+const TARGET_TIMEZONE = "Asia/Shanghai";
+
+const getTargetDateInfo = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TARGET_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    timeZoneName: "shortOffset",
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const weekdayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[map.weekday] ?? 0;
+
+  const tzName = map.timeZoneName || "GMT";
+  const match = tzName.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  const sign = match?.[1]?.startsWith("-") ? -1 : 1;
+  const hours = Number(match?.[1]?.replace(/[+-]/, "") || 0);
+  const minutes = Number(match?.[2] || 0);
+  const offsetMinutes = sign * (hours * 60 + minutes);
+
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    weekday: weekdayIndex,
+    offsetMinutes,
+  };
+};
+
+const buildTargetDate = (year, month, day, offsetMinutes) => {
+  const utcMillis = Date.UTC(year, month - 1, day);
+  return new Date(utcMillis - offsetMinutes * 60 * 1000);
+};
+
 const fmtTime = (ts) => {
   if (!ts) return "-";
   const d = new Date(ts * 1000);
-  return d.toLocaleString();
+  return d.toLocaleString("zh-CN", { timeZone: TARGET_TIMEZONE });
 };
 
 const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
@@ -491,32 +527,34 @@ const logConsole = (message, type = "info") => {
 };
 
 const defaultStartDate = () => {
+  const info = getTargetDateInfo();
+  const eightAm = buildTargetDate(info.year, info.month, info.day, info.offsetMinutes);
+  eightAm.setUTCHours(eightAm.getUTCHours() + 8);
   const now = new Date();
-  const start = new Date(now);
-  start.setHours(8, 0, 0, 0);
-  if (start > now) {
-    start.setDate(start.getDate() - 1);
+  const nowInTarget = new Date(now.toLocaleString("en-US", { timeZone: TARGET_TIMEZONE }));
+  if (eightAm > nowInTarget) {
+    eightAm.setUTCDate(eightAm.getUTCDate() - 1);
   }
-  return start;
+  return eightAm;
 };
 
 const nowDateTime = () => new Date();
 
 const getRangeTimestamps = (rangeKey) => {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+  const { year, month, day, weekday, offsetMinutes } = getTargetDateInfo();
+  const targetNow = new Date(new Date().toLocaleString("en-US", { timeZone: TARGET_TIMEZONE }));
+  let start = buildTargetDate(year, month, day, offsetMinutes);
 
   if (rangeKey === "week") {
-    const day = start.getDay() || 7;
-    start.setDate(start.getDate() - day + 1);
+    const diff = weekday === 0 ? 6 : weekday - 1; // Monday as start of week
+    start = new Date(start.getTime() - diff * 24 * 60 * 60 * 1000);
   } else if (rangeKey === "month") {
-    start.setDate(1);
+    start = buildTargetDate(year, month, 1, offsetMinutes);
   } else if (rangeKey !== "today") {
     return { start_ts: undefined, end_ts: undefined };
   }
 
-  return { start_ts: Math.floor(start.getTime() / 1000), end_ts: undefined };
+  return { start_ts: Math.floor(start.getTime() / 1000), end_ts: Math.floor(targetNow.getTime() / 1000) };
 };
 
 const buildUrl = (path, params) => {
@@ -799,8 +837,8 @@ const updateGuardFlow = (guardStats) => {
 const refreshSummary = async () => {
   const params = new URLSearchParams();
   const { start_ts, end_ts } = getRangeTimestamps(activeRange);
-  if (start_ts) params.set("start_ts", String(start_ts));
-  if (end_ts) params.set("end_ts", String(end_ts));
+  if (start_ts !== undefined) params.set("start_ts", String(start_ts));
+  if (end_ts !== undefined) params.set("end_ts", String(end_ts));
 
   try {
     const resp = await fetch(buildUrl("/api/summary", params));
