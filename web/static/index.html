@@ -470,10 +470,37 @@
   </div>
 
 <script>
+const TARGET_TIMEZONE = "Asia/Shanghai";
+
+const getTargetDateInfo = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TARGET_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    timeZoneName: "shortOffset",
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const weekdayIndex = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[map.weekday] ?? 0;
+
+  const tzName = map.timeZoneName || "GMT";
+  const match = tzName.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  const sign = match?.[1]?.startsWith("-") ? "-" : "+";
+  const hours = (match?.[1]?.replace(/[+-]/, "") || "0").padStart(2, "0");
+  const minutes = (match?.[2] || "00").padStart(2, "0");
+  const offset = `${sign}${hours}:${minutes}`;
+
+  return { year: map.year, month: map.month, day: map.day, weekday: weekdayIndex, offset };
+};
+
+const buildTargetDate = (year, month, day, offset) => new Date(`${year}-${month}-${day}T00:00:00${offset}`);
+
 const fmtTime = (ts) => {
   if (!ts) return "-";
   const d = new Date(ts * 1000);
-  return d.toLocaleString();
+  return d.toLocaleString("zh-CN", { timeZone: TARGET_TIMEZONE });
 };
 
 const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
@@ -491,27 +518,27 @@ const logConsole = (message, type = "info") => {
 };
 
 const defaultStartDate = () => {
+  const info = getTargetDateInfo();
+  const eightAm = new Date(`${info.year}-${info.month}-${info.day}T08:00:00${info.offset}`);
   const now = new Date();
-  const start = new Date(now);
-  start.setHours(8, 0, 0, 0);
-  if (start > now) {
-    start.setDate(start.getDate() - 1);
+  const nowInTarget = new Date(now.toLocaleString("en-US", { timeZone: TARGET_TIMEZONE }));
+  if (eightAm > nowInTarget) {
+    eightAm.setUTCDate(eightAm.getUTCDate() - 1);
   }
-  return start;
+  return eightAm;
 };
 
 const nowDateTime = () => new Date();
 
 const getRangeTimestamps = (rangeKey) => {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+  const { year, month, day, weekday, offset } = getTargetDateInfo();
+  let start = buildTargetDate(year, month, day, offset);
 
   if (rangeKey === "week") {
-    const day = start.getDay() || 7;
-    start.setDate(start.getDate() - day + 1);
+    const diff = weekday === 0 ? 6 : weekday - 1; // Monday as start of week
+    start.setUTCDate(start.getUTCDate() - diff);
   } else if (rangeKey === "month") {
-    start.setDate(1);
+    start = buildTargetDate(year, month, "01", offset);
   } else if (rangeKey !== "today") {
     return { start_ts: undefined, end_ts: undefined };
   }
