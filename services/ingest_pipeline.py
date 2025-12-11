@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from config.settings import Settings
+from config.settings import Settings, SettingsReloader
 from core.gift_parser import (
     GiftEvent,
     GUARD_LEVEL_NAMES,
@@ -16,9 +16,10 @@ from core.gift_parser import (
     parse_send_gift,
 )
 from db.repo import insert_gift
-from core.rule_engine import DailyGiftCounter, GiftRule
+from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
 from core.rate_limiter import RateLimiter
 from core.danmaku_sender import DanmakuSender
+from core.bili_client import get_bot_credential
 
 
 @dataclass
@@ -36,11 +37,13 @@ class IngestPipeline:
         rule: GiftRule,
         limiter: RateLimiter,
         sender: Optional[DanmakuSender] = None,
+        settings_reloader: Optional[SettingsReloader] = None,
     ):
         self.settings = settings
         self.rule = rule
         self.limiter = limiter
         self.sender = sender
+        self.settings_reloader = settings_reloader
         self.logger = logging.getLogger(__name__)
         self._pending_thanks: Dict[Any, PendingThanks] = {}
         self._thanks_day: str | None = None
@@ -48,7 +51,57 @@ class IngestPipeline:
         self._daily_counter = DailyGiftCounter()
         self._user_day_thanks: Dict[Any, int] = {}
 
+    def _refresh_sender(self) -> None:
+        if not self.settings.bot_sessdata or not self.settings.bot_bili_jct:
+            self.sender = None
+            return
+
+        credential = get_bot_credential(self.settings)
+        if self.sender is None:
+            self.sender = DanmakuSender(
+                self.settings.room_id,
+                credential,
+                thank_message_single=self.settings.thank_message_single,
+                thank_message_summary=self.settings.thank_message_summary,
+                thank_message_guard=self.settings.thank_message_guard,
+            )
+            return
+
+        self.sender.reconfigure(
+            room_id=self.settings.room_id,
+            credential=credential,
+            thank_message_single=self.settings.thank_message_single,
+            thank_message_summary=self.settings.thank_message_summary,
+            thank_message_guard=self.settings.thank_message_guard,
+        )
+
+    def _refresh_settings(self) -> None:
+        if self.settings_reloader is None:
+            return
+
+        latest = self.settings_reloader.reload_if_changed()
+        if latest == self.settings:
+            return
+
+        self.logger.info("检测到配置更新，重新加载感谢规则和限流")
+        self.settings = latest
+        self.rule = build_rule(
+            self.settings.target_gifts, self.settings.target_gift_ids, self.settings.target_min_num
+        )
+        self.limiter = RateLimiter(
+            global_cooldown_sec=self.settings.thank_global_cooldown_sec,
+            per_user_cooldown_sec=self.settings.thank_per_user_cooldown_sec,
+            per_user_daily_limit=self.settings.thank_per_user_daily_limit,
+        )
+        self._pending_thanks = {}
+        self._threshold_hits = {}
+        self._daily_counter = DailyGiftCounter()
+        self._user_day_thanks = {}
+        self._thanks_day = None
+        self._refresh_sender()
+
     async def handle_event(self, event: Dict[str, Any]) -> None:
+        self._refresh_settings()
         # AsyncEvent 会在触发任意事件时再派发一次 __ALL__，形式为
         # {"name": "<cmd>", "data": (<event>,)}，这里兼容这种结构。
         if isinstance(event, dict) and "name" in event and "data" in event:

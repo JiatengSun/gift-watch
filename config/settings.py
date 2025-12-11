@@ -1,9 +1,8 @@
-import logging
 import os
 import sys
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Mapping, MutableMapping
+from typing import List, Mapping, MutableMapping, Optional
 from dotenv import dotenv_values, load_dotenv
 
 def _detect_env_file_from_argv() -> str | None:
@@ -165,3 +164,35 @@ def get_settings(env_file: str | None = None) -> Settings:
 
         bili_client=_get_env("BILI_CLIENT", "aiohttp", env),
     )
+
+
+class SettingsReloader:
+    """Reload settings when the env file changes on disk."""
+
+    def __init__(self, env_file: str | None = None):
+        self.env_file = resolve_env_file(env_file)
+        self._cached = get_settings(self.env_file)
+        self._last_mtime = self._get_mtime()
+
+    def _get_mtime(self) -> Optional[float]:
+        if not self.env_file:
+            return None
+        path = Path(self.env_file)
+        try:
+            return path.stat().st_mtime
+        except FileNotFoundError:
+            return None
+
+    def current(self) -> Settings:
+        return self._cached
+
+    def reload_if_changed(self) -> Settings:
+        mtime = self._get_mtime()
+        if self._last_mtime is not None and mtime is not None and mtime <= self._last_mtime:
+            return self._cached
+
+        if mtime != self._last_mtime:
+            self._cached = get_settings(self.env_file)
+            self._last_mtime = mtime
+
+        return self._cached

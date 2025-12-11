@@ -6,24 +6,25 @@ from typing import Optional
 
 import aiohttp
 
-from config.settings import Settings
+from config.settings import Settings, get_settings
 from core.danmaku_sender import DanmakuSender
 
 
 class AnnouncementService:
     """Periodically send danmaku to keep the room warm."""
 
-    def __init__(self, settings: Settings, sender: DanmakuSender):
+    def __init__(self, env_file: str | None, settings: Settings, sender: DanmakuSender):
+        self.env_file = env_file
         self.settings = settings
         self.sender = sender
         self.logger = logging.getLogger(__name__)
         self._task: Optional[asyncio.Task] = None
 
-    async def _is_live(self) -> bool:
-        if not self.settings.announce_skip_offline:
+    async def _is_live(self, settings: Settings) -> bool:
+        if not settings.announce_skip_offline:
             return True
 
-        url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={self.settings.room_id}"
+        url = f"https://api.live.bilibili.com/room/v1/Room/room_init?id={settings.room_id}"
         timeout = aiohttp.ClientTimeout(total=5)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -39,17 +40,20 @@ class AnnouncementService:
         return payload["data"].get("live_status") == 1
 
     async def _loop(self) -> None:
-        interval = max(self.settings.announce_interval_sec, 30)
-        message = self.settings.announce_message.strip()
-        if not message:
-            self.logger.info("定时弹幕内容为空，跳过发送")
-            return
-
-        self.logger.info("定时弹幕已启用，间隔 %ss，开播时发送: %s", interval, message)
-
+        # Reload settings on every iteration so config changes apply without restart.
         while True:
+            settings = get_settings(self.env_file)
+            interval = max(settings.announce_interval_sec, 30)
+            message = settings.announce_message.strip()
+            if not settings.announce_enabled or not message:
+                self.logger.debug("定时弹幕未启用或内容为空，等待配置更新后再检查")
+                await asyncio.sleep(interval)
+                continue
+
+            self.logger.debug("定时弹幕检查: 间隔 %ss，开播时发送=%s", interval, settings.announce_skip_offline)
+
             try:
-                if await self._is_live():
+                if await self._is_live(settings):
                     await self.sender.send_custom_message(message)
                 else:
                     self.logger.debug("房间未开播，跳过本轮定时弹幕")

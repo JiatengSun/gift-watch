@@ -55,3 +55,25 @@ class DanmakuSender:
 
     async def send_custom_message(self, message: str) -> None:
         await self._send(message)
+
+    def reconfigure(
+        self,
+        *,
+        room_id: int | None = None,
+        credential: Credential | None = None,
+        thank_message_single: str | None = None,
+        thank_message_summary: str | None = None,
+        thank_message_guard: str | None = None,
+    ) -> None:
+        if room_id is not None and room_id != self.room_id:
+            self.room_id = room_id
+            self._room = None
+        if credential is not None and credential is not self.credential:
+            self.credential = credential
+            self._room = None
+        if thank_message_single is not None:
+            self._thank_message_single = thank_message_single
+        if thank_message_summary is not None:
+            self._thank_message_summary = thank_message_summary
+        if thank_message_guard is not None:
+            self._thank_message_guard = thank_message_guard
