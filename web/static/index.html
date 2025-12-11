@@ -256,6 +256,11 @@
       flex-wrap: wrap;
     }
 
+    .settings-block .inline.radios {
+      gap: 14px;
+      flex-wrap: nowrap;
+    }
+
     .settings-block .inline {
       align-items: center;
     }
@@ -268,6 +273,16 @@
       color: #e2e8f0;
       font-size: 14px;
       white-space: nowrap;
+      flex-wrap: nowrap;
+    }
+
+    @media (max-width: 720px) {
+      .settings-block .inline.radios {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
     }
 
     .settings-block .field input,
@@ -520,7 +535,7 @@
               <label class="inline">感谢大航海<input type="checkbox" id="thankGuardToggle" /></label>
             </div>
             <div class="field">
-              <div class="inline">
+              <div class="inline radios">
                 <label class="inline">按数量<input type="radio" name="thankMode" value="count" id="thankModeCount" checked /></label>
                 <label class="inline">按价值<input type="radio" name="thankMode" value="value" id="thankModeValue" /></label>
               </div>
