@@ -22,6 +22,11 @@ class DanmakuSender:
         # send_danmaku 需要 Danmaku 对象而非纯文本
         await room.send_danmaku(live.Danmaku(msg))
 
+    async def send_guard_thanks(self, uname: str, guard_name: str) -> None:
+        room = self._get_room()
+        msg = f"感谢{uname}的{guard_name}！！你最帅了！"
+        await room.send_danmaku(live.Danmaku(msg))
+
     async def send_summary_thanks(self, uname: str, gifts: Mapping[str, int]) -> None:
         room = self._get_room()
         parts = [f"{name} x{count}" for name, count in gifts.items()]
