@@ -303,17 +303,6 @@
       </div>
     </div>
 
-    <div class="card" style="margin-bottom: 14px;">
-      <div class="section-header">
-        <h2>实例绑定</h2>
-        <span class="muted">填写 .env 文件路径以绑定前端与对应的后端实例</span>
-      </div>
-      <div class="row">
-        <input id="envFile" placeholder="例如 .env.room1 或 /path/to/.env" aria-label="自定义 .env 文件路径" />
-        <p class="hint" style="margin:0;">所有接口请求都会带上 ?env= 值，从对应配置加载数据库与房间。</p>
-      </div>
-    </div>
-
     <!-- 桌面版：原有布局，包含房间礼物清单 -->
     <div id="view-desktop" class="view active">
       <div class="top-grid">
@@ -530,11 +519,8 @@ const getRangeTimestamps = (rangeKey) => {
   return { start_ts: Math.floor(start.getTime() / 1000), end_ts: undefined };
 };
 
-const getEnvFile = () => (document.getElementById("envFile")?.value || "").trim();
 const buildUrl = (path, params) => {
   const searchParams = params instanceof URLSearchParams ? params : new URLSearchParams(params || {});
-  const env = getEnvFile();
-  if (env) searchParams.set("env", env);
   const qs = searchParams.toString();
   return qs ? `${path}?${qs}` : path;
 };
@@ -1078,8 +1064,6 @@ document.querySelectorAll("[data-range]").forEach((btn) => {
     refreshSummary();
   });
 });
-
-document.getElementById("envFile")?.addEventListener("change", refreshSummary);
 
 initView("desktop");
 switchView("desktop");
