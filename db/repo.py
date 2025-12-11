@@ -18,28 +18,63 @@ def insert_gift(settings: Settings, gift: GiftEvent) -> None:
         )
 
 
-def _detect_ts_scale(conn) -> int:
-    cur = conn.execute("SELECT ts FROM gifts ORDER BY id DESC LIMIT 1")
+def _ts_scale_flags(conn) -> tuple[bool, bool]:
+    cur = conn.execute("SELECT MIN(ts), MAX(ts) FROM gifts")
     row = cur.fetchone()
-    latest_ts = int(row[0]) if row and row[0] is not None else None
-    if latest_ts is None:
-        return 1
-    return 1000 if latest_ts >= 1_000_000_000_000 else 1
+    if not row or row[0] is None or row[1] is None:
+        return False, False
+
+    min_ts, max_ts = int(row[0]), int(row[1])
+    has_seconds = min_ts < 1_000_000_000_000
+    has_millis = max_ts >= 1_000_000_000_000
+    return has_seconds, has_millis
 
 
-def _normalize_ts(value: int | None, scale: int) -> int | None:
+def _convert_input_ts(value: int | None, target_scale: int, input_is_ms: bool) -> int | None:
     if value is None:
         return None
-    if scale == 1000 and value < 1_000_000_000_000:
-        return value * 1000
-    if scale == 1 and value >= 1_000_000_000_000:
+    if input_is_ms and target_scale == 1:
         return value // 1000
+    if (not input_is_ms) and target_scale == 1000:
+        return value * 1000
     return value
 
 
-def _normalize_ts_range(conn, start_ts: int | None, end_ts: int | None) -> tuple[int | None, int | None]:
-    scale = _detect_ts_scale(conn)
-    return _normalize_ts(start_ts, scale), _normalize_ts(end_ts, scale)
+def _append_ts_clauses(
+    conn, clauses: list[str], params: list[object], start_ts: int | None, end_ts: int | None
+) -> None:
+    if start_ts is None and end_ts is None:
+        return
+
+    has_seconds, has_millis = _ts_scale_flags(conn)
+    if not has_seconds and not has_millis:
+        return
+
+    input_is_ms = any((v or 0) >= 1_000_000_000_000 for v in (start_ts, end_ts))
+    ts_clauses: list[str] = []
+
+    def build(scale: int) -> None:
+        scaled_start = _convert_input_ts(start_ts, scale, input_is_ms)
+        scaled_end = _convert_input_ts(end_ts, scale, input_is_ms)
+        if scaled_start is None and scaled_end is None:
+            return
+        parts = []
+        if scaled_start is not None:
+            parts.append("ts >= ?")
+            params.append(scaled_start)
+        if scaled_end is not None:
+            parts.append("ts <= ?")
+            params.append(scaled_end)
+        if parts:
+            ts_clauses.append("(" + " AND ".join(parts) + ")")
+
+    if has_seconds:
+        build(1)
+    if has_millis:
+        build(1000)
+
+    if ts_clauses:
+        clauses.append("(" + " OR ".join(ts_clauses) + ")")
 
 
 def _guard_level_clause(guard_level: int | None) -> tuple[str, list[object]]:
@@ -62,16 +97,12 @@ def query_gifts_by_uname(
     guard_level: int | None = None,
 ) -> List[Tuple]:
     with get_conn(settings) as conn:
-        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
-
         params = [uname]
         where = "WHERE uname = ?"
-        if start_ts is not None:
-            where += " AND ts >= ?"
-            params.append(start_ts)
-        if end_ts is not None:
-            where += " AND ts <= ?"
-            params.append(end_ts)
+        clauses: list[str] = []
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+        if clauses:
+            where += " AND " + " AND ".join(clauses)
 
         guard_clause, guard_params = _guard_level_clause(guard_level)
         where += guard_clause
@@ -100,16 +131,12 @@ def query_gifts_by_uname_and_gift(
     guard_level: int | None = None,
 ) -> List[Tuple]:
     with get_conn(settings) as conn:
-        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
-
         params = [uname, gift_name]
         where = "WHERE uname = ? AND gift_name = ?"
-        if start_ts is not None:
-            where += " AND ts >= ?"
-            params.append(start_ts)
-        if end_ts is not None:
-            where += " AND ts <= ?"
-            params.append(end_ts)
+        clauses: list[str] = []
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+        if clauses:
+            where += " AND " + " AND ".join(clauses)
 
         guard_clause, guard_params = _guard_level_clause(guard_level)
         where += guard_clause
@@ -138,17 +165,10 @@ def query_recent_gifts(
     guard_level: int | None = None,
 ) -> List[Tuple]:
     with get_conn(settings) as conn:
-        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
-
         clauses = []
         params: list[object] = []
 
-        if start_ts is not None:
-            clauses.append("ts >= ?")
-            params.append(start_ts)
-        if end_ts is not None:
-            clauses.append("ts <= ?")
-            params.append(end_ts)
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
         if uname:
             clauses.append("uname = ?")
             params.append(uname)
@@ -200,17 +220,10 @@ def delete_gift_by_id(settings: Settings, gift_id: int) -> bool:
 
 def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: int | None = None) -> dict[str, int]:
     with get_conn(settings) as conn:
-        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
-
         clauses = []
         params: list[object] = []
 
-        if start_ts is not None:
-            clauses.append("ts >= ?")
-            params.append(start_ts)
-        if end_ts is not None:
-            clauses.append("ts <= ?")
-            params.append(end_ts)
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
 
         where = ""
         if clauses:
