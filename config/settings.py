@@ -46,7 +46,8 @@ def _split_csv_ints(s: str) -> List[int]:
 
 
 def _split_lines(s: str) -> List[str]:
-    return [line.strip() for line in (s or "").splitlines() if line.strip()]
+    normalized = (s or "").replace("\\n", "\n")
+    return [line.strip() for line in normalized.splitlines() if line.strip()]
 
 @dataclass(frozen=True)
 class Settings:
