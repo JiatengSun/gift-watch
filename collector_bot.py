@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 
@@ -9,8 +10,19 @@ from db.sqlite import init_db
 from services.collector_service import CollectorService
 from services.bot_service import build_pipeline
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="gift-watch collector bot")
+    parser.add_argument(
+        "--env-file",
+        dest="env_file",
+        help="可选 .env 文件路径，用于在多实例场景下区分配置",
+    )
+    return parser.parse_args()
+
+
 async def main() -> None:
-    settings = get_settings()
+    args = parse_args()
+    settings = get_settings(args.env_file)
     logging.basicConfig(
         level=settings.log_level,
         format="[%(asctime)s][%(levelname)s] %(message)s",

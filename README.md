@@ -53,8 +53,9 @@ copy .env.example .env
 > 请不要泄露 Cookie。
 
 ### 3) 运行监听 + 自动感谢
+可指定独立的 `.env`，方便多实例运行：
 ```powershell
-python collector_bot.py
+python collector_bot.py --env-file .env.room1
 ```
 
 ### 4) 运行检索网页
@@ -64,6 +65,8 @@ python web_server.py
 
 默认端口 `3333`：
 - 浏览器打开 `http://127.0.0.1:3333`
+
+前端会在所有 API 请求上追加 `?env=...`，与填写的 `.env` 路径绑定，后端会按对应配置加载数据库与房间。
 
 你可以用 VS Code 的 Port Forwarding 将 3333 共享给其他人查看。
 

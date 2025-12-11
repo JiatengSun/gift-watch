@@ -284,6 +284,17 @@
       </div>
     </div>
 
+    <div class="card" style="margin-bottom: 14px;">
+      <div class="section-header">
+        <h2>实例绑定</h2>
+        <span class="muted">填写 .env 文件路径以绑定前端与对应的后端实例</span>
+      </div>
+      <div class="row">
+        <input id="envFile" placeholder="例如 .env.room1 或 /path/to/.env" aria-label="自定义 .env 文件路径" />
+        <p class="hint" style="margin:0;">所有接口请求都会带上 ?env= 值，从对应配置加载数据库与房间。</p>
+      </div>
+    </div>
+
     <!-- 桌面版：原有布局，包含房间礼物清单 -->
     <div id="view-desktop" class="view active">
       <div class="top-grid">
@@ -456,6 +467,15 @@ const defaultStartDate = () => {
 };
 
 const nowDateTime = () => new Date();
+
+const getEnvFile = () => (document.getElementById("envFile")?.value || "").trim();
+const buildUrl = (path, params) => {
+  const searchParams = params instanceof URLSearchParams ? params : new URLSearchParams(params || {});
+  const env = getEnvFile();
+  if (env) searchParams.set("env", env);
+  const qs = searchParams.toString();
+  return qs ? `${path}?${qs}` : path;
+};
 
 const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
   if (!rows.length) {
@@ -711,7 +731,7 @@ const inspectRecord = async (overrideId) => {
   const id = overrideId || getConsoleRecordId();
   if (!id) return;
   try {
-    const resp = await fetch(`/api/gifts/${id}`);
+    const resp = await fetch(buildUrl(`/api/gifts/${id}`));
     if (!resp.ok) {
       throw new Error(`HTTP ${resp.status}`);
     }
@@ -733,7 +753,7 @@ const deleteRecord = async (overrideId) => {
   const confirmed = confirm(`确认删除记录 ${id} 吗？此操作不可恢复。`);
   if (!confirmed) return;
   try {
-    const resp = await fetch(`/api/gifts/${id}`, { method: "DELETE" });
+    const resp = await fetch(buildUrl(`/api/gifts/${id}`), { method: "DELETE" });
     if (!resp.ok) {
       const errorText = await resp.text();
       throw new Error(errorText || `HTTP ${resp.status}`);
@@ -769,7 +789,7 @@ async function search(viewKey) {
   if (gift) params.set("gift_name", gift);
   if (start_ts) params.set("start_ts", String(start_ts));
 
-  const resp = await fetch(`/api/search?${params.toString()}`);
+  const resp = await fetch(buildUrl("/api/search", params));
   const data = await resp.json();
   renderSearch(data, cfg.search.outputs);
 }
@@ -795,7 +815,7 @@ const buildConsoleParams = () => {
 const loadConsoleRecords = async () => {
   logConsole("正在加载筛选后的流水...", "info");
   const params = buildConsoleParams();
-  const resp = await fetch(`/api/gifts?${params.toString()}`);
+  const resp = await fetch(buildUrl("/api/gifts", params));
   const data = await resp.json();
   renderConsoleRecords(data);
   updateTotalFlow(data);
@@ -817,7 +837,7 @@ async function loadAll(viewKey) {
   const cfg = viewConfigs[viewKey];
   const limitInput = document.getElementById(cfg.latest.limit);
   const limit = parseInt(limitInput?.value || "0", 10) || 200;
-  const resp = await fetch(`/api/gifts?limit=${limit}`);
+  const resp = await fetch(buildUrl("/api/gifts", { limit }));
   const data = await resp.json();
   const container = document.getElementById(cfg.latest.output);
   renderTable(
@@ -841,7 +861,7 @@ async function loadRoomGiftList() {
   const out = document.getElementById("roomGiftsOut");
   out.innerHTML = "<div class='muted'>加载中...</div>";
   try {
-    const resp = await fetch("/api/room_gift_list");
+    const resp = await fetch(buildUrl("/api/room_gift_list"));
     if (!resp.ok) {
       throw new Error(`HTTP ${resp.status}`);
     }
