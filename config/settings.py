@@ -1,11 +1,22 @@
 import logging
 import os
+import sys
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Mapping, MutableMapping
 from dotenv import dotenv_values, load_dotenv
 
-DEFAULT_ENV_FILE = os.getenv("ENV_FILE")
+def _detect_env_file_from_argv() -> str | None:
+    args = sys.argv or []
+    for idx, arg in enumerate(args):
+        if arg in {"--env-file", "--env_file", "-e"} and idx + 1 < len(args):
+            return args[idx + 1]
+        if arg.startswith("--env-file=") or arg.startswith("--env_file="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+DEFAULT_ENV_FILE = os.getenv("ENV_FILE") or _detect_env_file_from_argv()
 
 load_dotenv(DEFAULT_ENV_FILE if DEFAULT_ENV_FILE else None)
 
