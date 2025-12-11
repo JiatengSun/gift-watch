@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from pathlib import Path
@@ -43,6 +44,11 @@ def _split_csv_ints(s: str) -> List[int]:
             continue
     return values
 
+
+def _split_lines(s: str) -> List[str]:
+    normalized = (s or "").replace("\\n", "\n")
+    return [line.strip() for line in normalized.splitlines() if line.strip()]
+
 @dataclass(frozen=True)
 class Settings:
     room_id: int
@@ -69,7 +75,7 @@ class Settings:
 
     announce_enabled: bool
     announce_interval_sec: int
-    announce_message: str
+    announce_messages: List[str]
     announce_skip_offline: bool
 
     bili_client: str
@@ -131,7 +137,7 @@ def get_settings(env_file: str | None = None) -> Settings:
 
     announce_enabled = _get_env("ANNOUNCE_ENABLED", "0", env) == "1"
     announce_interval_sec = max(int(_get_env("ANNOUNCE_INTERVAL_SEC", "300", env)), 30)
-    announce_message = _get_env("ANNOUNCE_MESSAGE", "主播报时：感谢陪伴~", env)
+    announce_messages = _split_lines(_get_env("ANNOUNCE_MESSAGE", "主播报时：感谢陪伴~", env))
     announce_skip_offline = _get_env("ANNOUNCE_SKIP_OFFLINE", "1", env) == "1"
 
     return Settings(
@@ -159,7 +165,7 @@ def get_settings(env_file: str | None = None) -> Settings:
 
         announce_enabled=announce_enabled,
         announce_interval_sec=announce_interval_sec,
-        announce_message=announce_message,
+        announce_messages=announce_messages,
         announce_skip_offline=announce_skip_offline,
 
         bili_client=_get_env("BILI_CLIENT", "aiohttp", env),

@@ -29,7 +29,11 @@ def save_env(updates: Mapping[str, str], env_file: str | None = None) -> Path:
     env = load_env(env_file)
     env.update({k: str(v) for k, v in updates.items()})
 
-    lines = [f"{key}={value}" for key, value in env.items()]
+    def _escape_value(value: str) -> str:
+        # Keep newline-bearing values on a single line so they don't get truncated.
+        return value.replace("\n", "\\n")
+
+    lines = [f"{key}={_escape_value(value)}" for key, value in env.items()]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
