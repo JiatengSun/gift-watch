@@ -1165,6 +1165,13 @@ const collectSettingsFromForm = () => {
     return Number.isNaN(n) ? fallback : n;
   };
 
+  const normalizeMultiline = (value) =>
+    (value || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join("\n");
+
   return {
     thank_guard: document.getElementById("thankGuardToggle").checked,
     thank_mode: thankMode,

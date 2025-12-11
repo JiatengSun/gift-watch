@@ -31,7 +31,9 @@ def parse_guard_buy(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
     if cmd != "GUARD_BUY":
         return None
 
-    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    outer_data = event.get("data") or {}
+    inner_data = outer_data.get("data") if isinstance(outer_data, dict) else None
+    data = inner_data if isinstance(inner_data, dict) else outer_data if isinstance(outer_data, dict) else {}
     try:
         uid = int(data.get("uid") or 0)
     except Exception:
