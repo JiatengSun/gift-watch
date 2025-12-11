@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from config.settings import Settings
 from core.gift_parser import parse_send_gift, GiftEvent, SUPPORTED_GIFT_CMDS
 from db.repo import insert_gift
-from core.rule_engine import GiftRule
+from core.rule_engine import DailyGiftCounter, GiftRule
 from core.rate_limiter import RateLimiter
 from core.danmaku_sender import DanmakuSender
 
@@ -36,6 +36,9 @@ class IngestPipeline:
         self.sender = sender
         self.logger = logging.getLogger(__name__)
         self._pending_thanks: Dict[Any, PendingThanks] = {}
+        self._count_day: str | None = None
+        self._thanked_users: set[Any] = set()
+        self._daily_counter = DailyGiftCounter()
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
         # AsyncEvent 会在触发任意事件时再派发一次 __ALL__，形式为
@@ -77,7 +80,17 @@ class IngestPipeline:
         if self.sender is None:
             return
 
-        if not self.rule.hit(gift):
+        if not self.rule.is_target_gift(gift):
+            return
+
+        key = self._user_key(gift)
+        day, total = self._daily_counter.add(key, gift.num or 1, gift.ts)
+        self._reset_daily_thanks(day)
+
+        if key in self._thanked_users:
+            return
+
+        if total < self.rule.min_num:
             return
 
         # COMBO_SEND 会频繁触发多次事件，如果套用全局/用户冷却会导致只有第一条连击礼物被回复。
@@ -85,7 +98,16 @@ class IngestPipeline:
         if cmd != "COMBO_SEND" and gift.uid and not self.limiter.allow(gift.uid, gift.ts):
             return
 
+        self._thanked_users.add(key)
         self._buffer_thanks(gift)
+
+    def _reset_daily_thanks(self, day: str) -> None:
+        if self._count_day != day:
+            self._count_day = day
+            self._thanked_users = set()
+
+    def _user_key(self, gift: GiftEvent) -> Any:
+        return gift.uid or f"guest:{gift.uname}"
 
     def _buffer_thanks(self, gift: GiftEvent) -> None:
         """将同一用户 5 秒内的礼物合并，再发送一条汇总感谢，避免刷屏。"""
