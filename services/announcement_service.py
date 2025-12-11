@@ -19,6 +19,8 @@ class AnnouncementService:
         self.sender = sender
         self.logger = logging.getLogger(__name__)
         self._task: Optional[asyncio.Task] = None
+        self._message_index: int = 0
+        self._last_messages: list[str] | None = None
 
     async def _is_live(self, settings: Settings) -> bool:
         if not settings.announce_skip_offline:
@@ -53,8 +55,12 @@ class AnnouncementService:
         while True:
             settings = get_settings(self.env_file)
             interval = max(settings.announce_interval_sec, 30)
-            message = settings.announce_message.strip()
-            if not settings.announce_enabled or not message:
+            messages = [msg.strip() for msg in settings.announce_messages if msg.strip()]
+            if messages != self._last_messages:
+                self._message_index = 0
+                self._last_messages = list(messages)
+
+            if not settings.announce_enabled or not messages:
                 self.logger.debug("定时弹幕未启用或内容为空，等待配置更新后再检查")
                 await asyncio.sleep(interval)
                 continue
@@ -63,6 +69,8 @@ class AnnouncementService:
 
             try:
                 if await self._is_live(settings):
+                    message = messages[self._message_index % len(messages)]
+                    self._message_index = (self._message_index + 1) % len(messages)
                     await self.sender.send_custom_message(message)
                 else:
                     self.logger.debug("房间未开播，跳过本轮定时弹幕")
