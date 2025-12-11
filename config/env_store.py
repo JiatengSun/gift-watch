@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Dict, Mapping
 
 from dotenv import dotenv_values
 
-DEFAULT_ENV_PATH = Path(".env")
+DEFAULT_ENV_PATH = Path(os.getenv("ENV_FILE") or ".env")
 
 
 def _resolve_env_path(env_file: str | None) -> Path:

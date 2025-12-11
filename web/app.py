@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from config.settings import get_settings
+from config.settings import get_settings, resolve_env_file
 from db.sqlite import init_db
 from web.routes import router
 
@@ -17,7 +17,7 @@ STATIC_DIR = BASE_DIR / "static"
 
 @app.on_event("startup")
 def _startup():
-    settings = get_settings()
+    settings = get_settings(resolve_env_file(None))
     init_db(settings)
 
 app.include_router(router)

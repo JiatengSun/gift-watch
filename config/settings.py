@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from typing import List, Mapping, MutableMapping
 from dotenv import dotenv_values, load_dotenv
 
-load_dotenv()
+DEFAULT_ENV_FILE = os.getenv("ENV_FILE")
+
+load_dotenv(DEFAULT_ENV_FILE if DEFAULT_ENV_FILE else None)
 
 def _get_env(key: str, default: str = "", env: Mapping[str, str | None] | None = None) -> str:
     if env is not None and key in env:
@@ -63,14 +65,20 @@ class Settings:
     bili_client: str
 
 
+def resolve_env_file(env_file: str | None) -> str | None:
+    if env_file:
+        return env_file
+    if DEFAULT_ENV_FILE:
+        return DEFAULT_ENV_FILE
+    default_env = Path(".env")
+    return str(default_env) if default_env.exists() else None
+
+
 def get_settings(env_file: str | None = None) -> Settings:
     env: MutableMapping[str, str | None] | None = None
-    if env_file:
-        env = dotenv_values(env_file)
-    else:
-        default_env = Path(".env")
-        if default_env.exists():
-            env = dotenv_values(default_env)
+    resolved_env = resolve_env_file(env_file)
+    if resolved_env:
+        env = dotenv_values(resolved_env)
 
     room_id = int(_get_env("BILI_ROOM_ID", "1852633038", env))
     target_gifts = _split_csv(_get_env("TARGET_GIFTS", "人气票", env))
