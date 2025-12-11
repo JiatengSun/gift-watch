@@ -223,6 +223,15 @@
       font-size: 15px;
     }
 
+    .settings-block label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 600;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
     .field {
       display: flex;
       flex-direction: column;
@@ -235,6 +244,25 @@
       gap: 10px;
       align-items: center;
       flex-wrap: wrap;
+    }
+
+    .settings-block .inline {
+      align-items: flex-start;
+    }
+
+    .settings-block label.inline {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+
+    .settings-block .field input,
+    .settings-block .field textarea,
+    .settings-block .field select {
+      width: 100%;
     }
 
     .muted small {
