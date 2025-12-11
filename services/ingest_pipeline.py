@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any, DefaultDict, Dict, Optional
 import logging
 import asyncio
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from config.settings import Settings
+from config.settings import Settings, SettingsReloader
 from core.gift_parser import (
     GiftEvent,
     GUARD_LEVEL_NAMES,
@@ -15,9 +16,10 @@ from core.gift_parser import (
     parse_send_gift,
 )
 from db.repo import insert_gift
-from core.rule_engine import DailyGiftCounter, GiftRule
+from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
 from core.rate_limiter import RateLimiter
 from core.danmaku_sender import DanmakuSender
+from core.bili_client import get_bot_credential
 
 
 @dataclass
@@ -35,18 +37,71 @@ class IngestPipeline:
         rule: GiftRule,
         limiter: RateLimiter,
         sender: Optional[DanmakuSender] = None,
+        settings_reloader: Optional[SettingsReloader] = None,
     ):
         self.settings = settings
         self.rule = rule
         self.limiter = limiter
         self.sender = sender
+        self.settings_reloader = settings_reloader
         self.logger = logging.getLogger(__name__)
         self._pending_thanks: Dict[Any, PendingThanks] = {}
-        self._count_day: str | None = None
-        self._thanked_users: set[Any] = set()
+        self._thanks_day: str | None = None
+        self._threshold_hits: Dict[Any, int] = {}
         self._daily_counter = DailyGiftCounter()
+        self._user_day_thanks: Dict[Any, int] = {}
+
+    def _refresh_sender(self) -> None:
+        if not self.settings.bot_sessdata or not self.settings.bot_bili_jct:
+            self.sender = None
+            return
+
+        credential = get_bot_credential(self.settings)
+        if self.sender is None:
+            self.sender = DanmakuSender(
+                self.settings.room_id,
+                credential,
+                thank_message_single=self.settings.thank_message_single,
+                thank_message_summary=self.settings.thank_message_summary,
+                thank_message_guard=self.settings.thank_message_guard,
+            )
+            return
+
+        self.sender.reconfigure(
+            room_id=self.settings.room_id,
+            credential=credential,
+            thank_message_single=self.settings.thank_message_single,
+            thank_message_summary=self.settings.thank_message_summary,
+            thank_message_guard=self.settings.thank_message_guard,
+        )
+
+    def _refresh_settings(self) -> None:
+        if self.settings_reloader is None:
+            return
+
+        latest = self.settings_reloader.reload_if_changed()
+        if latest == self.settings:
+            return
+
+        self.logger.info("检测到配置更新，重新加载感谢规则和限流")
+        self.settings = latest
+        self.rule = build_rule(
+            self.settings.target_gifts, self.settings.target_gift_ids, self.settings.target_min_num
+        )
+        self.limiter = RateLimiter(
+            global_cooldown_sec=self.settings.thank_global_cooldown_sec,
+            per_user_cooldown_sec=self.settings.thank_per_user_cooldown_sec,
+            per_user_daily_limit=self.settings.thank_per_user_daily_limit,
+        )
+        self._pending_thanks = {}
+        self._threshold_hits = {}
+        self._daily_counter = DailyGiftCounter()
+        self._user_day_thanks = {}
+        self._thanks_day = None
+        self._refresh_sender()
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
+        self._refresh_settings()
         # AsyncEvent 会在触发任意事件时再派发一次 __ALL__，形式为
         # {"name": "<cmd>", "data": (<event>,)}，这里兼容这种结构。
         if isinstance(event, dict) and "name" in event and "data" in event:
@@ -94,34 +149,68 @@ class IngestPipeline:
             guard_name = GUARD_LEVEL_NAMES.get(gift.gift_id, GUARD_LEVEL_NAMES[3])
             await self.sender.send_guard_thanks(gift.uname, guard_name)
 
-        if not self.rule.is_target_gift(gift):
-            return
-
         key = self._user_key(gift)
+        day_key = self._ensure_thanks_day(gift.ts)
+
+        if self.settings.thank_mode == "value":
+            if not self._should_thank_by_value(gift):
+                return
+            if not self._allow_thanks(key, gift.ts, ignore_cooldown=cmd == "COMBO_SEND"):
+                return
+            self._buffer_thanks(gift)
+            return
+
+        if not self._is_target_gift(gift):
+            return
+
         day, total = self._daily_counter.add(key, gift.num or 1, gift.ts)
-        self._reset_daily_thanks(day)
+        if day != day_key:
+            self._ensure_thanks_day(gift.ts)
 
-        if key in self._thanked_users:
+        threshold = max(self.rule.min_num, 1)
+        reached = total // threshold
+        sent = self._threshold_hits.get(key, 0)
+        if reached <= sent:
             return
 
-        if total < self.rule.min_num:
+        if not self._allow_thanks(key, gift.ts, ignore_cooldown=cmd == "COMBO_SEND"):
             return
 
-        # COMBO_SEND 会频繁触发多次事件，如果套用全局/用户冷却会导致只有第一条连击礼物被回复。
-        # 对于连击，直接跳过冷却限制，保证每个连击包裹都能被计入 5 秒内的结算。
-        if cmd != "COMBO_SEND" and gift.uid and not self.limiter.allow(gift.uid, gift.ts):
-            return
-
-        self._thanked_users.add(key)
+        self._threshold_hits[key] = reached
         self._buffer_thanks(gift)
-
-    def _reset_daily_thanks(self, day: str) -> None:
-        if self._count_day != day:
-            self._count_day = day
-            self._thanked_users = set()
 
     def _user_key(self, gift: GiftEvent) -> Any:
         return gift.uid or f"guest:{gift.uname}"
+
+    def _ensure_thanks_day(self, ts: float) -> str:
+        day = time.strftime("%Y-%m-%d", time.localtime(ts))
+        if self._thanks_day != day:
+            self._thanks_day = day
+            self._threshold_hits = {}
+            self._user_day_thanks = {}
+        return day
+
+    def _allow_thanks(self, key: Any, ts: float, *, ignore_cooldown: bool = False) -> bool:
+        daily_sent = self._user_day_thanks.get(key, 0)
+        if self.settings.thank_per_user_daily_limit > 0 and daily_sent >= self.settings.thank_per_user_daily_limit:
+            return False
+
+        allowed = self.limiter.allow(key, ts, ignore_cooldown=ignore_cooldown)
+        if allowed:
+            self._user_day_thanks[key] = daily_sent + 1
+        return allowed
+
+    def _is_target_gift(self, gift: GiftEvent) -> bool:
+        if self.settings.thank_mode == "value" and not self.rule.target_gift_ids and not self.rule.target_gift_names:
+            return True
+        return self.rule.is_target_gift(gift)
+
+    def _should_thank_by_value(self, gift: GiftEvent) -> bool:
+        if self.settings.thank_value_threshold <= 0:
+            return False
+        if not self._is_target_gift(gift):
+            return False
+        return gift.total_price >= self.settings.thank_value_threshold
 
     def _buffer_thanks(self, gift: GiftEvent) -> None:
         """将同一用户 5 秒内的礼物合并，再发送一条汇总感谢，避免刷屏。"""
