@@ -9,6 +9,7 @@ from core.bili_client import setup_request_client
 from db.sqlite import init_db
 from services.collector_service import CollectorService
 from services.bot_service import build_pipeline
+from services.announcement_service import AnnouncementService
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="gift-watch collector bot")
@@ -40,8 +41,17 @@ async def main() -> None:
     await collector.log_room_status()
     collector.bind_all_handler(pipeline.handle_event)
 
+    announcement_task = None
+    if settings.announce_enabled and pipeline.sender is not None:
+        scheduler = AnnouncementService(settings, pipeline.sender)
+        announcement_task = scheduler.start()
+
     print(f"[gift-watch] Listening room {settings.room_id} ...")
-    await collector.run()
+    tasks = [asyncio.create_task(collector.run())]
+    if announcement_task:
+        tasks.append(announcement_task)
+
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     asyncio.run(main())
