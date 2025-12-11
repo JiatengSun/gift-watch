@@ -42,7 +42,7 @@ class SettingsPayload(BaseModel):
     thank_templates: ThankTemplatesPayload
     announce_enabled: bool = Field(False, description="定时弹幕是否启用")
     announce_interval_sec: int = Field(300, ge=30, description="定时弹幕间隔秒")
-    announce_message: str = Field("", description="定时弹幕内容")
+    announce_message: str = Field("", description="定时弹幕内容，多行会轮播发送")
     announce_skip_offline: bool = Field(True, description="未开播时是否跳过")
 
     @field_validator("thank_mode")
@@ -68,7 +68,7 @@ def _serialize_settings(settings: Settings) -> dict:
         },
         "announce_enabled": settings.announce_enabled,
         "announce_interval_sec": settings.announce_interval_sec,
-        "announce_message": settings.announce_message,
+        "announce_message": "\n".join(settings.announce_messages),
         "announce_skip_offline": settings.announce_skip_offline,
     }
 

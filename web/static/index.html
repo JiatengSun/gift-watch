@@ -597,13 +597,13 @@
             </div>
             <div class="field">
               <label>定时发送内容
-                <textarea id="announceMessageInput" placeholder="定时问候语"></textarea>
+                <textarea id="announceMessageInput" placeholder="支持多行，按顺序轮播"></textarea>
               </label>
             </div>
             <div class="field inline">
               <label class="inline">未开播时不发<input type="checkbox" id="announceSkipOfflineToggle" checked /></label>
             </div>
-            <p class="hint">需要小号登录态才能发送，默认 5 分钟一次。</p>
+            <p class="hint">需要小号登录态才能发送，默认 5 分钟一次；多行内容会轮播发送。</p>
           </div>
         </div>
 
@@ -1119,6 +1119,13 @@ const collectSettingsFromForm = () => {
     return Number.isNaN(n) ? fallback : n;
   };
 
+  const normalizeMultiline = (value) =>
+    (value || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join("\n");
+
   return {
     thank_guard: document.getElementById("thankGuardToggle").checked,
     thank_mode: thankMode,
@@ -1134,7 +1141,7 @@ const collectSettingsFromForm = () => {
     },
     announce_enabled: document.getElementById("announceEnabledToggle").checked,
     announce_interval_sec: Math.max(toInt(document.getElementById("announceIntervalInput").value, 300), 30),
-    announce_message: document.getElementById("announceMessageInput").value,
+    announce_message: normalizeMultiline(document.getElementById("announceMessageInput").value),
     announce_skip_offline: document.getElementById("announceSkipOfflineToggle").checked,
   };
 };
