@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from config.settings import Settings
 from core.gift_parser import (
     GiftEvent,
+    GUARD_LEVEL_NAMES,
     SUPPORTED_GIFT_CMDS,
     parse_guard_buy,
     parse_send_gift,
@@ -78,7 +79,7 @@ class IngestPipeline:
         insert_gift(self.settings, gift)
 
         self.logger.info(
-            "📦 收到礼物：uid=%s uname=%s gift=%s x%d price=%s", 
+            "📦 收到礼物：uid=%s uname=%s gift=%s x%d price=%s",
             gift.uid,
             gift.uname,
             gift.gift_name,
@@ -88,6 +89,10 @@ class IngestPipeline:
 
         if self.sender is None:
             return
+
+        if cmd == "GUARD_BUY" and self.settings.thank_guard:
+            guard_name = GUARD_LEVEL_NAMES.get(gift.gift_id, GUARD_LEVEL_NAMES[3])
+            await self.sender.send_guard_thanks(gift.uname, guard_name)
 
         if not self.rule.is_target_gift(gift):
             return

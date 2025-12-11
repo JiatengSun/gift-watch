@@ -47,6 +47,7 @@ class Settings:
     thank_global_cooldown_sec: int
     thank_per_user_cooldown_sec: int
     thank_per_user_daily: bool
+    thank_guard: bool
 
     bili_client: str
 
@@ -88,6 +89,7 @@ def get_settings(env_file: str | None = None) -> Settings:
         thank_global_cooldown_sec=int(_get_env("THANK_GLOBAL_COOLDOWN_SEC", "10", env)),
         thank_per_user_cooldown_sec=int(_get_env("THANK_PER_USER_COOLDOWN_SEC", "60", env)),
         thank_per_user_daily=_get_env("THANK_PER_USER_DAILY", "1", env) == "1",
+        thank_guard=_get_env("THANK_GUARD", "0", env) == "1",
 
         bili_client=_get_env("BILI_CLIENT", "aiohttp", env),
     )

@@ -45,6 +45,7 @@ copy .env.example .env
 - `TARGET_GIFT_IDS`（可选，用礼物 ID 触发感谢）
 - `TARGET_MIN_NUM`（默认 50，示例场景只感谢“50 张人气票”）
 - `THANK_PER_USER_DAILY`（默认 1，表示每个用户每天只感谢一次）
+- `THANK_GUARD`（默认 0，设置为 1 时对大航海 GUARD_BUY 发送“感谢xxx的yy！！你最帅了！”弹幕）
 - 小号的 `BOT_SESSDATA / BOT_BILI_JCT / BOT_BUVID3`
 
 感谢触发条件：同一用户（按 B 站 uid）在同一天送出的目标礼物累计数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。
