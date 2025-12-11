@@ -18,6 +18,30 @@ def insert_gift(settings: Settings, gift: GiftEvent) -> None:
         )
 
 
+def _detect_ts_scale(conn) -> int:
+    cur = conn.execute("SELECT ts FROM gifts ORDER BY id DESC LIMIT 1")
+    row = cur.fetchone()
+    latest_ts = int(row[0]) if row and row[0] is not None else None
+    if latest_ts is None:
+        return 1
+    return 1000 if latest_ts >= 1_000_000_000_000 else 1
+
+
+def _normalize_ts(value: int | None, scale: int) -> int | None:
+    if value is None:
+        return None
+    if scale == 1000 and value < 1_000_000_000_000:
+        return value * 1000
+    if scale == 1 and value >= 1_000_000_000_000:
+        return value // 1000
+    return value
+
+
+def _normalize_ts_range(conn, start_ts: int | None, end_ts: int | None) -> tuple[int | None, int | None]:
+    scale = _detect_ts_scale(conn)
+    return _normalize_ts(start_ts, scale), _normalize_ts(end_ts, scale)
+
+
 def _guard_level_clause(guard_level: int | None) -> tuple[str, list[object]]:
     if guard_level is None:
         return "", []
@@ -37,20 +61,22 @@ def query_gifts_by_uname(
     end_ts: int | None = None,
     guard_level: int | None = None,
 ) -> List[Tuple]:
-    params = [uname]
-    where = "WHERE uname = ?"
-    if start_ts is not None:
-        where += " AND ts >= ?"
-        params.append(start_ts)
-    if end_ts is not None:
-        where += " AND ts <= ?"
-        params.append(end_ts)
-
-    guard_clause, guard_params = _guard_level_clause(guard_level)
-    where += guard_clause
-    params.extend(guard_params)
-
     with get_conn(settings) as conn:
+        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
+
+        params = [uname]
+        where = "WHERE uname = ?"
+        if start_ts is not None:
+            where += " AND ts >= ?"
+            params.append(start_ts)
+        if end_ts is not None:
+            where += " AND ts <= ?"
+            params.append(end_ts)
+
+        guard_clause, guard_params = _guard_level_clause(guard_level)
+        where += guard_clause
+        params.extend(guard_params)
+
         cur = conn.execute(
             f"""
             SELECT id, ts, uid, uname, gift_name, num, total_price
@@ -73,20 +99,22 @@ def query_gifts_by_uname_and_gift(
     end_ts: int | None = None,
     guard_level: int | None = None,
 ) -> List[Tuple]:
-    params = [uname, gift_name]
-    where = "WHERE uname = ? AND gift_name = ?"
-    if start_ts is not None:
-        where += " AND ts >= ?"
-        params.append(start_ts)
-    if end_ts is not None:
-        where += " AND ts <= ?"
-        params.append(end_ts)
-
-    guard_clause, guard_params = _guard_level_clause(guard_level)
-    where += guard_clause
-    params.extend(guard_params)
-
     with get_conn(settings) as conn:
+        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
+
+        params = [uname, gift_name]
+        where = "WHERE uname = ? AND gift_name = ?"
+        if start_ts is not None:
+            where += " AND ts >= ?"
+            params.append(start_ts)
+        if end_ts is not None:
+            where += " AND ts <= ?"
+            params.append(end_ts)
+
+        guard_clause, guard_params = _guard_level_clause(guard_level)
+        where += guard_clause
+        params.extend(guard_params)
+
         cur = conn.execute(
             f"""
             SELECT id, ts, uid, uname, gift_name, num, total_price
@@ -109,32 +137,34 @@ def query_recent_gifts(
     gift_name: str | None = None,
     guard_level: int | None = None,
 ) -> List[Tuple]:
-    clauses = []
-    params: list[object] = []
-
-    if start_ts is not None:
-        clauses.append("ts >= ?")
-        params.append(start_ts)
-    if end_ts is not None:
-        clauses.append("ts <= ?")
-        params.append(end_ts)
-    if uname:
-        clauses.append("uname = ?")
-        params.append(uname)
-    if gift_name:
-        clauses.append("gift_name = ?")
-        params.append(gift_name)
-
-    guard_clause, guard_params = _guard_level_clause(guard_level)
-    if guard_clause:
-        clauses.append(guard_clause.removeprefix(" AND "))
-        params.extend(guard_params)
-
-    where = ""
-    if clauses:
-        where = "WHERE " + " AND ".join(clauses)
-
     with get_conn(settings) as conn:
+        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
+
+        clauses = []
+        params: list[object] = []
+
+        if start_ts is not None:
+            clauses.append("ts >= ?")
+            params.append(start_ts)
+        if end_ts is not None:
+            clauses.append("ts <= ?")
+            params.append(end_ts)
+        if uname:
+            clauses.append("uname = ?")
+            params.append(uname)
+        if gift_name:
+            clauses.append("gift_name = ?")
+            params.append(gift_name)
+
+        guard_clause, guard_params = _guard_level_clause(guard_level)
+        if guard_clause:
+            clauses.append(guard_clause.removeprefix(" AND "))
+            params.extend(guard_params)
+
+        where = ""
+        if clauses:
+            where = "WHERE " + " AND ".join(clauses)
+
         cur = conn.execute(
             f"""
             SELECT id, ts, uid, uname, gift_name, num, total_price
@@ -169,21 +199,23 @@ def delete_gift_by_id(settings: Settings, gift_id: int) -> bool:
 
 
 def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: int | None = None) -> dict[str, int]:
-    clauses = []
-    params: list[object] = []
-
-    if start_ts is not None:
-        clauses.append("ts >= ?")
-        params.append(start_ts)
-    if end_ts is not None:
-        clauses.append("ts <= ?")
-        params.append(end_ts)
-
-    where = ""
-    if clauses:
-        where = "WHERE " + " AND ".join(clauses)
-
     with get_conn(settings) as conn:
+        start_ts, end_ts = _normalize_ts_range(conn, start_ts, end_ts)
+
+        clauses = []
+        params: list[object] = []
+
+        if start_ts is not None:
+            clauses.append("ts >= ?")
+            params.append(start_ts)
+        if end_ts is not None:
+            clauses.append("ts <= ?")
+            params.append(end_ts)
+
+        where = ""
+        if clauses:
+            where = "WHERE " + " AND ".join(clauses)
+
         cur = conn.execute(
             f"""
             SELECT
