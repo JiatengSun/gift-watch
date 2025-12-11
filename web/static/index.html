@@ -470,10 +470,16 @@
   </div>
 
 <script>
+const TARGET_TIMEZONE = "Asia/Shanghai";
+const TARGET_TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+const shiftToTargetTz = (date) => new Date(date.getTime() + TARGET_TZ_OFFSET_MS);
+const shiftFromTargetTz = (date) => new Date(date.getTime() - TARGET_TZ_OFFSET_MS);
+
 const fmtTime = (ts) => {
   if (!ts) return "-";
   const d = new Date(ts * 1000);
-  return d.toLocaleString();
+  return d.toLocaleString("zh-CN", { timeZone: TARGET_TIMEZONE });
 };
 
 const fmtNumber = (n) => new Intl.NumberFormat("zh-CN").format(n);
@@ -491,32 +497,32 @@ const logConsole = (message, type = "info") => {
 };
 
 const defaultStartDate = () => {
-  const now = new Date();
+  const now = shiftToTargetTz(new Date());
   const start = new Date(now);
-  start.setHours(8, 0, 0, 0);
+  start.setUTCHours(8, 0, 0, 0);
   if (start > now) {
-    start.setDate(start.getDate() - 1);
+    start.setUTCDate(start.getUTCDate() - 1);
   }
-  return start;
+  return shiftFromTargetTz(start);
 };
 
 const nowDateTime = () => new Date();
 
 const getRangeTimestamps = (rangeKey) => {
-  const now = new Date();
+  const now = shiftToTargetTz(new Date());
   const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+  start.setUTCHours(0, 0, 0, 0);
 
   if (rangeKey === "week") {
-    const day = start.getDay() || 7;
-    start.setDate(start.getDate() - day + 1);
+    const day = start.getUTCDay() || 7;
+    start.setUTCDate(start.getUTCDate() - day + 1);
   } else if (rangeKey === "month") {
-    start.setDate(1);
+    start.setUTCDate(1);
   } else if (rangeKey !== "today") {
     return { start_ts: undefined, end_ts: undefined };
   }
 
-  return { start_ts: Math.floor(start.getTime() / 1000), end_ts: undefined };
+  return { start_ts: Math.floor(shiftFromTargetTz(start).getTime() / 1000), end_ts: undefined };
 };
 
 const buildUrl = (path, params) => {
