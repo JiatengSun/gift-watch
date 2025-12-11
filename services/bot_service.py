@@ -14,12 +14,18 @@ def build_pipeline(settings: Settings) -> IngestPipeline:
     limiter = RateLimiter(
         global_cooldown_sec=settings.thank_global_cooldown_sec,
         per_user_cooldown_sec=settings.thank_per_user_cooldown_sec,
-        per_user_daily=settings.thank_per_user_daily,
+        per_user_daily_limit=settings.thank_per_user_daily_limit,
     )
 
     sender = None
     if settings.bot_sessdata and settings.bot_bili_jct:
         credential = get_bot_credential(settings)
-        sender = DanmakuSender(settings.room_id, credential)
+        sender = DanmakuSender(
+            settings.room_id,
+            credential,
+            thank_message_single=settings.thank_message_single,
+            thank_message_summary=settings.thank_message_summary,
+            thank_message_guard=settings.thank_message_guard,
+        )
 
     return IngestPipeline(settings=settings, rule=rule, limiter=limiter, sender=sender)
