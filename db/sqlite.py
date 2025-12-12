@@ -87,9 +87,66 @@ def _migrate_gifts_room_id(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE _gifts_migrating RENAME TO gifts")
 
 
+def _ensure_gifts_room_id(conn: sqlite3.Connection) -> None:
+    """Guarantee the gifts table has a room_id column by rebuilding if needed."""
+
+    if "room_id" in _column_names(conn, "gifts"):
+        return
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS _gifts_rebuild (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts INTEGER NOT NULL,
+          room_id INTEGER NOT NULL,
+          uid INTEGER,
+          uname TEXT,
+          gift_id INTEGER,
+          gift_name TEXT,
+          num INTEGER DEFAULT 1,
+          total_price INTEGER DEFAULT 0,
+          raw_json TEXT
+        )
+        """
+    )
+
+    existing_cols = _column_names(conn, "gifts")
+    transferable_cols = [
+        col
+        for col in existing_cols
+        if col
+        in {
+            "id",
+            "ts",
+            "uid",
+            "uname",
+            "gift_id",
+            "gift_name",
+            "num",
+            "total_price",
+            "raw_json",
+        }
+    ]
+
+    if transferable_cols:
+        col_list = ", ".join(transferable_cols)
+        insert_cols = f"{col_list}, room_id"
+        select_cols = f"{col_list}, 0"
+    else:
+        insert_cols = "room_id"
+        select_cols = "0"
+
+    conn.execute(
+        f"INSERT INTO _gifts_rebuild ({insert_cols}) SELECT {select_cols} FROM gifts"
+    )
+    conn.execute("DROP TABLE gifts")
+    conn.execute("ALTER TABLE _gifts_rebuild RENAME TO gifts")
+
+
 def init_db(settings: Settings) -> None:
     schema_path = Path(__file__).with_name("schema.sql")
     schema_sql = schema_path.read_text(encoding="utf-8")
     with get_conn(settings) as conn:
         _migrate_gifts_room_id(conn)
+        _ensure_gifts_room_id(conn)
         conn.executescript(schema_sql)
