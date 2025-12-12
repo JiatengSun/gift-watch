@@ -6,6 +6,10 @@ from pathlib import Path
 from config.settings import Settings
 
 
+def _debug_log(message: str) -> None:
+    print(f"[db.init_db] {message}")
+
+
 def get_conn(settings: Settings) -> sqlite3.Connection:
     return sqlite3.connect(settings.db_path)
 
@@ -146,6 +150,32 @@ def _ensure_gifts_room_id(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE _gifts_rebuild RENAME TO gifts")
 
 
+def _guarantee_gifts_room_id(conn: sqlite3.Connection) -> bool:
+    """Attempt twice to ensure gifts has room_id, logging outcomes."""
+
+    if not _table_exists(conn, "gifts"):
+        _debug_log("gifts table does not exist; skipping room_id guarantee")
+        return False
+
+    for attempt in range(2):
+        cols = _column_names(conn, "gifts")
+        _debug_log(
+            f"attempt {attempt + 1}: gifts columns before ensure -> {sorted(cols)}"
+        )
+        if "room_id" in cols:
+            _debug_log("room_id already present; no rebuild needed")
+            return True
+
+        _ensure_gifts_room_id(conn)
+        conn.commit()
+
+    cols = _column_names(conn, "gifts")
+    _debug_log(
+        f"room_id still missing after ensure attempts, columns now -> {sorted(cols)}"
+    )
+    return "room_id" in cols
+
+
 def init_db(settings: Settings) -> None:
     schema_path = Path(__file__).with_name("schema.sql")
     schema_sql = schema_path.read_text(encoding="utf-8")
@@ -153,7 +183,7 @@ def init_db(settings: Settings) -> None:
         # Migrate legacy gifts tables before applying the schema. Commit early so
         # a later schema failure doesn't roll back the column migration.
         _migrate_gifts_room_id(conn)
-        _ensure_gifts_room_id(conn)
+        _guarantee_gifts_room_id(conn)
         conn.commit()
 
         try:
@@ -165,6 +195,9 @@ def init_db(settings: Settings) -> None:
             # If applying the schema failed because the gifts table still lacks
             # room_id (e.g., the prior migration was rolled back by the failed
             # script), rebuild it and retry once.
-            _ensure_gifts_room_id(conn)
+            _debug_log(
+                "schema exec failed with missing room_id; retrying ensure + schema"
+            )
+            _guarantee_gifts_room_id(conn)
             conn.commit()
             conn.executescript(schema_sql)
