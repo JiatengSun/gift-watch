@@ -207,6 +207,100 @@ def _force_recreate_gifts(conn: sqlite3.Connection) -> None:
         conn.execute(f"DROP TABLE IF EXISTS {source_table}")
 
 
+def _ensure_queue_room_id(conn: sqlite3.Connection) -> None:
+    """Ensure danmaku_queue has a room_id column, rebuilding if required."""
+
+    if not _table_exists(conn, "danmaku_queue"):
+        return
+
+    cols = _column_names(conn, "danmaku_queue")
+    if "room_id" in cols:
+        return
+
+    try:
+        conn.execute("ALTER TABLE danmaku_queue ADD COLUMN room_id INTEGER NOT NULL DEFAULT 0")
+        cols = _column_names(conn, "danmaku_queue")
+    except sqlite3.OperationalError:
+        cols = _column_names(conn, "danmaku_queue")
+
+    if "room_id" in cols:
+        return
+
+    conn.execute("ALTER TABLE danmaku_queue RENAME TO _danmaku_queue_rebuild_source")
+    existing_cols = _column_names(conn, "_danmaku_queue_rebuild_source")
+    transferable_cols = [
+        col
+        for col in existing_cols
+        if col
+        in {
+            "id",
+            "message",
+            "status",
+            "not_before",
+            "created_at",
+            "sent_at",
+            "last_error",
+        }
+    ]
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS danmaku_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          room_id INTEGER NOT NULL,
+          message TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          not_before REAL NOT NULL,
+          created_at REAL NOT NULL,
+          sent_at REAL,
+          last_error TEXT
+        )
+        """
+    )
+
+    if transferable_cols:
+        col_list = ", ".join(transferable_cols)
+        insert_cols = f"{col_list}, room_id"
+        select_cols = f"{col_list}, 0"
+        conn.execute(
+            f"INSERT INTO danmaku_queue ({insert_cols}) "
+            f"SELECT {select_cols} FROM _danmaku_queue_rebuild_source"
+        )
+
+    conn.execute("DROP TABLE IF EXISTS _danmaku_queue_rebuild_source")
+
+
+def _ensure_queue_meta_room_id(conn: sqlite3.Connection) -> None:
+    """Ensure danmaku_queue_meta carries room_id as primary key."""
+
+    if not _table_exists(conn, "danmaku_queue_meta"):
+        return
+
+    cols = _column_names(conn, "danmaku_queue_meta")
+    if "room_id" in cols:
+        return
+
+    last_sent_row = conn.execute(
+        "SELECT last_sent_at FROM danmaku_queue_meta LIMIT 1"
+    ).fetchone()
+    last_sent_at = float(last_sent_row[0]) if last_sent_row and last_sent_row[0] else 0.0
+
+    conn.execute("ALTER TABLE danmaku_queue_meta RENAME TO _danmaku_queue_meta_old")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS danmaku_queue_meta (
+          room_id INTEGER PRIMARY KEY,
+          last_sent_at REAL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO danmaku_queue_meta(room_id, last_sent_at) VALUES (?, ?)",
+        (0, last_sent_at),
+    )
+    conn.execute("DROP TABLE IF EXISTS _danmaku_queue_meta_old")
+
+
 def _guarantee_gifts_room_id(conn: sqlite3.Connection) -> bool:
     """Attempt twice to ensure gifts has room_id, logging outcomes."""
 
@@ -241,6 +335,8 @@ def init_db(settings: Settings) -> None:
         # a later schema failure doesn't roll back the column migration.
         _migrate_gifts_room_id(conn)
         _guarantee_gifts_room_id(conn)
+        _ensure_queue_room_id(conn)
+        _ensure_queue_meta_room_id(conn)
         conn.commit()
 
         statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
@@ -255,6 +351,8 @@ def init_db(settings: Settings) -> None:
                     f"schema statement {idx} failed with missing room_id: {stmt}"
                 )
                 _force_recreate_gifts(conn)
+                _ensure_queue_room_id(conn)
+                _ensure_queue_meta_room_id(conn)
                 conn.commit()
 
                 try:
