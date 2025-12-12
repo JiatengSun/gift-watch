@@ -230,7 +230,13 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             settings.room_id,
         ]
 
+        blind_box_base = settings.blind_box_base_gift.strip()
+
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+
+        if blind_box_base:
+            clauses.append("gift_name != ?")
+            params.append(blind_box_base)
 
         where = ""
         if clauses:
@@ -262,3 +268,55 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             "governor": int(row[5] or 0),
         },
     }
+
+
+def query_blind_box_totals(
+    settings: Settings,
+    *,
+    uid: int | None,
+    uname: str | None,
+    base_gift: str,
+    reward_gifts: list[str],
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> tuple[int, int]:
+    def _aggregate(conn, gift_names: list[str]) -> tuple[int, int]:
+        clauses = ["room_id = ?"]
+        params: list[object] = [settings.room_id]
+
+        if uid:
+            clauses.append("uid = ?")
+            params.append(uid)
+        elif uname:
+            clauses.append("uname = ?")
+            params.append(uname)
+
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+
+        if gift_names:
+            placeholders = ",".join(["?"] * len(gift_names))
+            clauses.append(f"gift_name IN ({placeholders})")
+            params.extend(gift_names)
+        elif base_gift.strip():
+            clauses.append("gift_name != ?")
+            params.append(base_gift.strip())
+
+        where = " AND ".join(clauses)
+        cur = conn.execute(
+            f"""
+            SELECT COALESCE(SUM(total_price), 0) as total_price, COUNT(*) as record_count
+            FROM gifts
+            WHERE {where}
+            """,
+            params,
+        )
+        row = cur.fetchone() or (0, 0)
+        total_price, record_count = row[0] or 0, row[1] or 0
+        return int(total_price), int(record_count)
+
+    with get_conn(settings) as conn:
+        reward_total, reward_count = _aggregate(conn, reward_gifts)
+
+    base_total = reward_count * 15000
+
+    return base_total, reward_total
