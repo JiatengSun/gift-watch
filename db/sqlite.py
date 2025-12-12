@@ -150,6 +150,63 @@ def _ensure_gifts_room_id(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE _gifts_rebuild RENAME TO gifts")
 
 
+def _force_recreate_gifts(conn: sqlite3.Connection) -> None:
+    """Drop and recreate gifts with room_id, copying compatible data when possible."""
+
+    has_existing = _table_exists(conn, "gifts")
+    if has_existing:
+        conn.execute("ALTER TABLE gifts RENAME TO _gifts_rebuild_source")
+        source_table = "_gifts_rebuild_source"
+        existing_cols = _column_names(conn, source_table)
+        transferable_cols = [
+            col
+            for col in existing_cols
+            if col
+            in {
+                "ts",
+                "uid",
+                "uname",
+                "gift_id",
+                "gift_name",
+                "num",
+                "total_price",
+                "raw_json",
+            }
+        ]
+    else:
+        source_table = None
+        transferable_cols = []
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gifts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts INTEGER NOT NULL,
+          room_id INTEGER NOT NULL,
+          uid INTEGER,
+          uname TEXT,
+          gift_id INTEGER,
+          gift_name TEXT,
+          num INTEGER DEFAULT 1,
+          total_price INTEGER DEFAULT 0,
+          raw_json TEXT
+        )
+        """
+    )
+
+    if source_table and transferable_cols:
+        col_list = ", ".join(transferable_cols)
+        insert_cols = f"{col_list}, room_id"
+        select_cols = f"{col_list}, 0"
+        conn.execute(
+            f"INSERT INTO gifts ({insert_cols}) "
+            f"SELECT {select_cols} FROM {source_table}"
+        )
+
+    if source_table:
+        conn.execute(f"DROP TABLE IF EXISTS {source_table}")
+
+
 def _guarantee_gifts_room_id(conn: sqlite3.Connection) -> bool:
     """Attempt twice to ensure gifts has room_id, logging outcomes."""
 
@@ -200,4 +257,15 @@ def init_db(settings: Settings) -> None:
             )
             _guarantee_gifts_room_id(conn)
             conn.commit()
-            conn.executescript(schema_sql)
+            try:
+                conn.executescript(schema_sql)
+            except sqlite3.OperationalError as exc_retry:
+                if "room_id" not in str(exc_retry):
+                    raise
+
+                _debug_log(
+                    "schema retry still missing room_id; forcing full gifts rebuild"
+                )
+                _force_recreate_gifts(conn)
+                conn.commit()
+                conn.executescript(schema_sql)
