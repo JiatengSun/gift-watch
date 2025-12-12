@@ -10,6 +10,7 @@ from db.sqlite import init_db
 from services.collector_service import CollectorService
 from services.bot_service import build_pipeline
 from services.announcement_service import AnnouncementService
+from services.gift_price_cache import ensure_gift_price_cache
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="gift-watch collector bot")
@@ -24,6 +25,9 @@ def parse_args() -> argparse.Namespace:
 async def main() -> None:
     args = parse_args()
     resolved_env = resolve_env_file(args.env_file)
+    base_settings = get_settings(resolved_env)
+    ensure_gift_price_cache(base_settings)
+
     settings_reloader = SettingsReloader(resolved_env)
     settings = settings_reloader.current()
     logging.basicConfig(
