@@ -172,6 +172,56 @@
       overflow-x: auto;
     }
 
+    .line-chart {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      min-height: 260px;
+      overflow: hidden;
+    }
+
+    .line-chart svg {
+      width: 100%;
+      height: auto;
+    }
+
+    .line-chart-grid line {
+      stroke: rgba(148, 163, 184, 0.15);
+      stroke-width: 1;
+    }
+
+    .line-chart-path {
+      fill: none;
+      stroke: #22d3ee;
+      stroke-width: 3;
+    }
+
+    .line-chart-area {
+      fill: url(#opsAreaFill);
+      stroke: none;
+    }
+
+    .line-chart-point {
+      fill: #38bdf8;
+      stroke: #0ea5e9;
+      stroke-width: 2;
+    }
+
+    .chart-label-row {
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      align-items: start;
+    }
+
+    .chart-label-row .label {
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .bar {
       flex: 1;
       min-width: 28px;
@@ -1326,6 +1376,8 @@ const renderOpsTimeline = (payload) => {
   const meta = document.getElementById("opsTimelineMeta");
   if (!container) return;
 
+  container.classList.add("line-chart");
+
   const rawPoints = payload?.points || [];
   const compressPoints = (pts) => {
     const maxBars = payload?.range === "today" ? 24 : 48;
@@ -1361,10 +1413,6 @@ const renderOpsTimeline = (payload) => {
   const values = points.map((p) => Number(p.value || 0)).filter((v) => v >= 0);
   const maxValue = Math.max(...values, 1);
   container.innerHTML = "";
-  container.style.overflowX = payload?.range === "today" ? "hidden" : "auto";
-
-  const chartHeight = Math.max(container.clientHeight || container.offsetHeight || 0, 220);
-  const barArea = Math.max(chartHeight - 60, 120); // leave room for labels/values
 
   const labelFor = (ts) => {
     const d = new Date(ts * 1000);
@@ -1374,25 +1422,107 @@ const renderOpsTimeline = (payload) => {
     return d.toLocaleDateString("zh-CN", { timeZone: TARGET_TIMEZONE, month: "2-digit", day: "2-digit" });
   };
 
-  points.forEach((p) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "bar-wrapper";
-    if (payload?.range === "today") {
-      wrapper.style.minWidth = "18px";
+  const chartHeight = Math.max(container.clientHeight || container.offsetHeight || 0, 280);
+  const width = Math.max(container.clientWidth || container.offsetWidth || 0, 640);
+  const padding = { top: 12, right: 30, bottom: 36, left: 36 };
+  const innerHeight = Math.max(chartHeight - padding.top - padding.bottom, 120);
+  const innerWidth = Math.max(width - padding.left - padding.right, 200);
+  const step = points.length > 1 ? innerWidth / (points.length - 1) : 0;
+
+  const yFor = (v) => padding.top + (innerHeight - (Math.min(v, maxValue) / maxValue) * innerHeight);
+  const xFor = (idx) => padding.left + idx * step;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${chartHeight}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+
+  const defs = document.createElementNS(svg.namespaceURI, "defs");
+  const gradient = document.createElementNS(svg.namespaceURI, "linearGradient");
+  gradient.setAttribute("id", "opsAreaFill");
+  gradient.setAttribute("x1", "0");
+  gradient.setAttribute("y1", "0");
+  gradient.setAttribute("x2", "0");
+  gradient.setAttribute("y2", "1");
+
+  const stop1 = document.createElementNS(svg.namespaceURI, "stop");
+  stop1.setAttribute("offset", "0%");
+  stop1.setAttribute("stop-color", "rgba(56, 189, 248, 0.32)");
+  const stop2 = document.createElementNS(svg.namespaceURI, "stop");
+  stop2.setAttribute("offset", "100%");
+  stop2.setAttribute("stop-color", "rgba(56, 189, 248, 0.04)");
+  gradient.appendChild(stop1);
+  gradient.appendChild(stop2);
+  defs.appendChild(gradient);
+  svg.appendChild(defs);
+
+  const grid = document.createElementNS(svg.namespaceURI, "g");
+  grid.setAttribute("class", "line-chart-grid");
+  const gridLines = 4;
+  for (let i = 0; i <= gridLines; i++) {
+    const y = padding.top + (innerHeight / gridLines) * i;
+    const line = document.createElementNS(svg.namespaceURI, "line");
+    line.setAttribute("x1", padding.left);
+    line.setAttribute("x2", padding.left + innerWidth);
+    line.setAttribute("y1", y);
+    line.setAttribute("y2", y);
+    grid.appendChild(line);
+  }
+  svg.appendChild(grid);
+
+  const buildPath = (closeArea = false) => {
+    if (!points.length) return "";
+    const coords = points.map((p, idx) => [xFor(idx), yFor(p.value || 0)]);
+    let d = `M ${coords[0][0]} ${coords[0][1]}`;
+    coords.slice(1).forEach(([x, y]) => {
+      d += ` L ${x} ${y}`;
+    });
+    if (closeArea) {
+      d += ` L ${padding.left + innerWidth} ${padding.top + innerHeight}`;
+      d += ` L ${padding.left} ${padding.top + innerHeight} Z`;
     }
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    bar.dataset.value = fmtNumber(p.value || 0);
-    const ratio = Math.min((p.value || 0) / maxValue, 1);
-    const pixelHeight = Math.max(8, Math.round(ratio * barArea));
-    bar.style.height = `${pixelHeight}px`;
-    const label = document.createElement("div");
-    label.className = "bar-label";
-    label.textContent = labelFor(p.ts);
-    wrapper.appendChild(bar);
-    wrapper.appendChild(label);
-    container.appendChild(wrapper);
+    return d;
+  };
+
+  const area = document.createElementNS(svg.namespaceURI, "path");
+  area.setAttribute("d", buildPath(true));
+  area.setAttribute("class", "line-chart-area");
+  svg.appendChild(area);
+
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute("d", buildPath(false));
+  path.setAttribute("class", "line-chart-path");
+  svg.appendChild(path);
+
+  const pointsGroup = document.createElementNS(svg.namespaceURI, "g");
+  points.forEach((p, idx) => {
+    const cx = xFor(idx);
+    const cy = yFor(p.value || 0);
+    const circle = document.createElementNS(svg.namespaceURI, "circle");
+    circle.setAttribute("cx", cx);
+    circle.setAttribute("cy", cy);
+    circle.setAttribute("r", 4);
+    circle.setAttribute("class", "line-chart-point");
+    circle.setAttribute("data-value", fmtNumber(p.value || 0));
+    const title = document.createElementNS(svg.namespaceURI, "title");
+    title.textContent = `${labelFor(p.ts)}: ${fmtNumber(p.value || 0)}`;
+    circle.appendChild(title);
+    pointsGroup.appendChild(circle);
   });
+  svg.appendChild(pointsGroup);
+
+  container.appendChild(svg);
+
+  const labelsRow = document.createElement("div");
+  labelsRow.className = "chart-label-row";
+  labelsRow.style.gridTemplateColumns = `repeat(${points.length}, minmax(0, 1fr))`;
+  labelsRow.style.marginTop = "2px";
+  points.forEach((p) => {
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = labelFor(p.ts);
+    labelsRow.appendChild(label);
+  });
+  container.appendChild(labelsRow);
 };
 
 async function loadOpsTimeline(rangeKey = opsTimelineRange) {
