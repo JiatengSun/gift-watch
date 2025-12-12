@@ -435,12 +435,11 @@
         <div class="card">
           <div class="section-header">
             <h2>最新礼物流水</h2>
-            <div class="row">
-              <input id="allLimit-desktop" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
-              <button id="btnLoadAll-desktop">刷新全部</button>
+            <div class="row" style="gap:12px;">
+              <button id="btnLoadAll-desktop">回到最新</button>
+              <span class="hint">每页固定 50 条，可翻页查看更多历史记录。</span>
             </div>
           </div>
-          <p class="hint">默认展示最新 200 条，可根据需要调整（最多 1000 条）。</p>
           <div id="allOut-desktop"></div>
         </div>
       </div>
@@ -484,12 +483,11 @@
       <div class="card">
         <div class="section-header">
           <h2>全部礼物流水</h2>
-          <div class="row">
-            <input id="allLimit-mobile" type="number" min="1" max="800" value="150" aria-label="返回条数" />
-            <button id="btnLoadAll-mobile">刷新</button>
+          <div class="row" style="gap:12px;">
+            <button id="btnLoadAll-mobile">回到最新</button>
+            <span class="hint">固定每页 50 条，点击翻页查看历史。</span>
           </div>
         </div>
-        <p class="hint">表格可左右滑动查看全部字段。</p>
         <div id="allOut-mobile"></div>
       </div>
     </div>
@@ -678,12 +676,11 @@
         <div class="card">
           <div class="section-header">
             <h2>最新流水</h2>
-            <div class="row">
-              <input id="allLimit-tablet" type="number" min="1" max="1000" value="200" aria-label="返回条数" />
-              <button id="btnLoadAll-tablet">刷新</button>
+            <div class="row" style="gap:12px;">
+              <button id="btnLoadAll-tablet">回到最新</button>
+              <span class="hint">支持翻页浏览，每页 50 条。</span>
             </div>
           </div>
-          <p class="hint">适配横屏 / 竖屏，支持左右滑动。</p>
           <div id="allOut-tablet"></div>
         </div>
       </div>
@@ -692,6 +689,7 @@
 
 <script>
 const TARGET_TIMEZONE = "Asia/Shanghai";
+const LATEST_PAGE_SIZE = 50;
 
 const getTargetDateInfo = (date = new Date()) => {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -863,7 +861,7 @@ const viewConfigs = {
       },
       outputs: { summary: "searchSummary-desktop", aggregated: "searchAggregated-desktop", raw: "searchRaw-desktop" },
     },
-    latest: { button: "btnLoadAll-desktop", limit: "allLimit-desktop", output: "allOut-desktop" },
+    latest: { button: "btnLoadAll-desktop", output: "allOut-desktop" },
     roomGifts: { button: "btnLoadRoomGifts", output: "roomGiftsOut" },
   },
   mobile: {
@@ -879,7 +877,7 @@ const viewConfigs = {
       },
       outputs: { summary: "searchSummary-mobile", aggregated: "searchAggregated-mobile", raw: "searchRaw-mobile" },
     },
-    latest: { button: "btnLoadAll-mobile", limit: "allLimit-mobile", output: "allOut-mobile" },
+    latest: { button: "btnLoadAll-mobile", output: "allOut-mobile" },
   },
   tablet: {
     root: document.getElementById("view-tablet"),
@@ -894,7 +892,7 @@ const viewConfigs = {
       },
       outputs: { summary: "searchSummary-tablet", aggregated: "searchAggregated-tablet", raw: "searchRaw-tablet" },
     },
-    latest: { button: "btnLoadAll-tablet", limit: "allLimit-tablet", output: "allOut-tablet" },
+    latest: { button: "btnLoadAll-tablet", output: "allOut-tablet" },
   },
   console: {
     root: document.getElementById("view-console"),
@@ -902,7 +900,7 @@ const viewConfigs = {
 };
 
 const viewState = Object.fromEntries(
-  Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false, settingsLoaded: false }])
+  Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false, settingsLoaded: false, latestPage: 1 }])
 );
 
 const renderSearch = (records, targets) => {
@@ -974,6 +972,72 @@ const renderSearch = (records, targets) => {
       { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
     ],
     "暂无记录"
+  );
+};
+
+const renderLatest = (container, payload, viewKey) => {
+  if (!container) return;
+
+  const items = payload?.items || [];
+  const total = Number(payload?.total || 0);
+  const pageSize = Number(payload?.page_size || LATEST_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(Math.max(Number(payload?.page || 1), 1), totalPages);
+
+  viewState[viewKey].latestPage = currentPage;
+
+  container.innerHTML = "";
+
+  const metaRow = document.createElement("div");
+  metaRow.className = "flex-between";
+  metaRow.style.margin = "6px 0 10px";
+  metaRow.innerHTML = `
+    <div class="badge">共 ${fmtNumber(total)} 条</div>
+    <div class="badge">每页 ${fmtNumber(pageSize)} 条</div>
+    <div class="badge">第 ${fmtNumber(currentPage)} / ${fmtNumber(totalPages)} 页</div>
+  `;
+  container.appendChild(metaRow);
+
+  const controls = document.createElement("div");
+  controls.className = "row";
+  controls.style.gap = "8px";
+
+  const prevBtn = document.createElement("button");
+  prevBtn.textContent = "上一页";
+  prevBtn.disabled = currentPage <= 1;
+  prevBtn.addEventListener("click", () => loadAll(viewKey, currentPage - 1));
+  controls.appendChild(prevBtn);
+
+  const nextBtn = document.createElement("button");
+  nextBtn.textContent = "下一页";
+  nextBtn.disabled = currentPage >= totalPages || total === 0;
+  nextBtn.addEventListener("click", () => loadAll(viewKey, currentPage + 1));
+  controls.appendChild(nextBtn);
+
+  const refreshBtn = document.createElement("button");
+  refreshBtn.className = "ghost-btn";
+  refreshBtn.textContent = "刷新当前页";
+  refreshBtn.addEventListener("click", () => loadAll(viewKey, currentPage));
+  controls.appendChild(refreshBtn);
+
+  container.appendChild(controls);
+
+  const tableHolder = document.createElement("div");
+  tableHolder.style.marginTop = "10px";
+  container.appendChild(tableHolder);
+
+  renderTable(
+    tableHolder,
+    items,
+    [
+      { key: "id", label: "ID", className: "number" },
+      { key: "ts", label: "时间", render: (v) => fmtTime(v) },
+      { key: "uname", label: "用户" },
+      { key: "gift_name", label: "礼物" },
+      { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
+    ],
+    "暂无礼物流水"
   );
 };
 
@@ -1346,7 +1410,7 @@ const deleteRecord = async (overrideId) => {
     if (activeView === "console") {
       loadConsoleRecords();
     } else {
-      loadAll(activeView);
+      loadAll(activeView, viewState[activeView]?.latestPage || 1);
     }
   } catch (err) {
     logConsole(`删除失败：${err.message || err}`, "error");
@@ -1420,27 +1484,25 @@ const resetConsoleFilters = () => {
   document.getElementById("consoleLimit").value = "200";
 };
 
-async function loadAll(viewKey) {
+async function loadAll(viewKey, targetPage) {
   const cfg = viewConfigs[viewKey];
-  const limitInput = document.getElementById(cfg.latest.limit);
-  const limit = parseInt(limitInput?.value || "0", 10) || 200;
-  const resp = await fetch(buildUrl("/api/gifts", { limit }));
-  const data = await resp.json();
   const container = document.getElementById(cfg.latest.output);
-  renderTable(
-    container,
-    data,
-    [
-      { key: "id", label: "ID", className: "number" },
-      { key: "ts", label: "时间", render: (v) => fmtTime(v) },
-      { key: "uname", label: "用户" },
-      { key: "gift_name", label: "礼物" },
-      { key: "num", label: "数量", className: "number", render: (v) => fmtNumber(v) },
-      { key: "total_price", label: "总价（元）", className: "number", render: (v) => fmtCurrency(v) },
-    ],
-    "暂无礼物流水"
-  );
-  viewState[viewKey].loadedAll = true;
+  const page = targetPage || viewState[viewKey].latestPage || 1;
+
+  try {
+    const resp = await fetch(buildUrl("/api/gifts/paged", { page, page_size: LATEST_PAGE_SIZE }));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    renderLatest(container, data, viewKey);
+    viewState[viewKey].loadedAll = true;
+  } catch (err) {
+    viewState[viewKey].loadedAll = false;
+    if (container) {
+      container.innerHTML = `<div class="empty">加载失败：${err.message || err}</div>`;
+    }
+  }
 }
 
 async function loadRoomGiftList() {
@@ -1504,7 +1566,7 @@ const initView = (viewKey) => {
       document.getElementById(cfg.search.button)?.addEventListener("click", () => search(viewKey));
     }
     if (cfg.latest) {
-      document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey));
+      document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey, 1));
     }
     if (cfg.roomGifts) {
       document.getElementById(cfg.roomGifts.button)?.addEventListener("click", loadRoomGiftList);

@@ -158,6 +158,38 @@ def query_gifts_by_uname_and_gift(
         return cur.fetchall()
 
 
+def _recent_gift_where_params(
+    conn,
+    settings: Settings,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    uname: str | None = None,
+    gift_name: str | None = None,
+    guard_level: int | None = None,
+) -> tuple[str, list[object]]:
+    clauses = ["room_id = ?"]
+    params: list[object] = [settings.room_id]
+
+    _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+    if uname:
+        clauses.append("uname = ?")
+        params.append(uname)
+    if gift_name:
+        clauses.append("gift_name = ?")
+        params.append(gift_name)
+
+    guard_clause, guard_params = _guard_level_clause(guard_level)
+    if guard_clause:
+        clauses.append(guard_clause.removeprefix(" AND "))
+        params.extend(guard_params)
+
+    where = ""
+    if clauses:
+        where = "WHERE " + " AND ".join(clauses)
+
+    return where, params
+
+
 def query_recent_gifts(
     settings: Settings,
     limit: int = 200,
@@ -168,25 +200,15 @@ def query_recent_gifts(
     guard_level: int | None = None,
 ) -> List[Tuple]:
     with get_conn(settings) as conn:
-        clauses = ["room_id = ?"]
-        params: list[object] = [settings.room_id]
-
-        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
-        if uname:
-            clauses.append("uname = ?")
-            params.append(uname)
-        if gift_name:
-            clauses.append("gift_name = ?")
-            params.append(gift_name)
-
-        guard_clause, guard_params = _guard_level_clause(guard_level)
-        if guard_clause:
-            clauses.append(guard_clause.removeprefix(" AND "))
-            params.extend(guard_params)
-
-        where = ""
-        if clauses:
-            where = "WHERE " + " AND ".join(clauses)
+        where, params = _recent_gift_where_params(
+            conn,
+            settings,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            uname=uname,
+            gift_name=gift_name,
+            guard_level=guard_level,
+        )
 
         cur = conn.execute(
             f"""
@@ -199,6 +221,53 @@ def query_recent_gifts(
             (*params, limit),
         )
         return cur.fetchall()
+
+
+def query_recent_gifts_paginated(
+    settings: Settings,
+    *,
+    page: int = 1,
+    page_size: int = 50,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    uname: str | None = None,
+    gift_name: str | None = None,
+    guard_level: int | None = None,
+) -> tuple[int, list[Tuple]]:
+    page = max(page, 1)
+    page_size = max(page_size, 1)
+    offset = (page - 1) * page_size
+
+    with get_conn(settings) as conn:
+        where, params = _recent_gift_where_params(
+            conn,
+            settings,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            uname=uname,
+            gift_name=gift_name,
+            guard_level=guard_level,
+        )
+
+        count_cur = conn.execute(
+            f"SELECT COUNT(*) FROM gifts {where}",
+            params,
+        )
+        total = int(count_cur.fetchone()[0] or 0)
+
+        cur = conn.execute(
+            f"""
+            SELECT id, ts, uid, uname, gift_name, num, total_price
+            FROM gifts
+            {where}
+            ORDER BY ts DESC
+            LIMIT ? OFFSET ?
+            """,
+            (*params, page_size, offset),
+        )
+        rows = cur.fetchall()
+
+    return total, rows
 
 
 def query_gift_by_id(settings: Settings, gift_id: int) -> Optional[Tuple]:

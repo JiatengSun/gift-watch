@@ -12,6 +12,7 @@ from db.repo import (
     query_gift_by_id,
     query_gifts_by_uname,
     query_gifts_by_uname_and_gift,
+    query_recent_gifts_paginated,
     query_recent_gifts,
     query_flow_summary,
 )
@@ -207,6 +208,48 @@ def list_gifts(
         }
         for r in rows
     ]
+
+
+@router.get("/api/gifts/paged")
+def list_gifts_paginated(
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(50, ge=1, le=500, description="每页条数"),
+    start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
+    end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
+    uname: str | None = Query(None, description="用户名"),
+    gift_name: str | None = Query(None, description="礼物名"),
+    guard_level: int | None = Query(None, ge=1, le=3, description="大航海等级：1=总督 2=提督 3=舰长"),
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
+):
+    settings = get_settings(_resolve_env(env))
+    total, rows = query_recent_gifts_paginated(
+        settings,
+        page=page,
+        page_size=page_size,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        uname=uname,
+        gift_name=gift_name,
+        guard_level=guard_level,
+    )
+
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "items": [
+            {
+                "id": r[0],
+                "ts": r[1],
+                "uid": r[2],
+                "uname": r[3],
+                "gift_name": r[4],
+                "num": r[5],
+                "total_price": r[6],
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/api/gifts/{gift_id}")
