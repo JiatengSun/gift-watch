@@ -120,6 +120,12 @@ class IngestPipeline:
         if cmd == "DANMU_MSG":
             await self._handle_blind_box_query(event)
             return
+
+        coerced_data = self._coerce_event_data(event)
+        if coerced_data is not None and coerced_data is not event.get("data"):
+            event = dict(event)
+            event["data"] = coerced_data
+
         gift_like = self._is_gift_like_event(event)
         if cmd and cmd not in SUPPORTED_GIFT_CMDS and not gift_like:
             if self.logger.isEnabledFor(logging.DEBUG):
@@ -239,10 +245,34 @@ class IngestPipeline:
 
         return uid, uname, content
 
+    def _coerce_event_data(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        raw = event.get("data")
+        if isinstance(raw, dict):
+            return raw
+
+        if isinstance(raw, (list, tuple)):
+            for item in raw:
+                if isinstance(item, dict):
+                    return item
+
+        if hasattr(raw, "__dict__"):
+            coerced = dict(vars(raw))
+            inner = getattr(raw, "data", None)
+            if isinstance(inner, dict):
+                coerced.setdefault("data", inner)
+            return coerced
+
+        return None
+
     def _is_gift_like_event(self, event: dict[str, Any]) -> bool:
         data = event.get("data") or {}
         if isinstance(data, dict) and isinstance(data.get("data"), dict):
             data = data.get("data")  # bilibili-api 的部分封装会套一层 data.data
+
+        if isinstance(data, dict) and isinstance(data.get("data"), (list, tuple)):
+            nested = data.get("data")
+            if nested and isinstance(nested[0], dict):
+                data = nested[0]
 
         if not isinstance(data, dict):
             return False

@@ -89,6 +89,9 @@ def parse_send_gift(
 
     outer_data = event.get("data") or {}
     inner_data = outer_data.get("data") if isinstance(outer_data, dict) else None
+    if isinstance(inner_data, (list, tuple)) and inner_data and isinstance(inner_data[0], dict):
+        inner_data = inner_data[0]
+
     data = inner_data if isinstance(inner_data, dict) else outer_data
     try:
         uid = int(data.get("uid") or 0)
