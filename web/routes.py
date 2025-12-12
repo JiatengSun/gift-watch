@@ -344,6 +344,7 @@ def engagement_panel(
             "uname": "",
             "sessions": set(),
             "message_count": 0,
+            "total_price": 0,
             "total_length": 0,
             "sent_gift": False,
             "first_ts": None,
@@ -367,6 +368,7 @@ def engagement_panel(
             profile["uname"] = uname
             profile["sessions"].add(idx)
             profile["message_count"] += 1
+            profile["total_price"] += int(total_price or 0)
             profile["total_length"] += _extract_message_length(raw_json or "")
             profile["sent_gift"] = profile["sent_gift"] or bool(gift_id) or (total_price or 0) > 0
             profile["first_ts"] = ts if profile["first_ts"] is None else min(profile["first_ts"], ts)
@@ -410,6 +412,7 @@ def engagement_panel(
                 "session_count": len(data["sessions"]),
                 "message_count": msg_count,
                 "avg_length": round(total_len / msg_count, 1) if msg_count else 0,
+                "total_price": data["total_price"],
                 "sent_gift": data["sent_gift"],
                 "first_ts": data["first_ts"],
                 "last_ts": data["last_ts"],
@@ -426,6 +429,88 @@ def engagement_panel(
         "anchor_end_ts": int(aligned_end.timestamp()),
         "sessions": session_rows,
         "users": users_out,
+    }
+
+
+def _normalize_time_range(range_key: str, tz: ZoneInfo) -> tuple[datetime, datetime, int, bool]:
+    now = datetime.now(tz)
+    range_key = (range_key or "today").lower()
+
+    if range_key == "today":
+        start = datetime(now.year, now.month, now.day, tzinfo=tz)
+        return start, now, 300, False
+
+    if range_key == "week":
+        start = datetime(now.year, now.month, now.day, tzinfo=tz) - timedelta(days=6)
+        end = datetime(now.year, now.month, now.day, tzinfo=tz) + timedelta(days=1)
+        return start, end, 24 * 3600, True
+
+    if range_key == "month":
+        start = datetime(now.year, now.month, 1, tzinfo=tz)
+        end = datetime(now.year, now.month, now.day, tzinfo=tz) + timedelta(days=1)
+        return start, end, 24 * 3600, True
+
+    start = datetime(now.year, now.month, now.day, tzinfo=tz) - timedelta(days=89)
+    end = datetime(now.year, now.month, now.day, tzinfo=tz) + timedelta(days=1)
+    return start, end, 24 * 3600, True
+
+
+@router.get("/api/ops/timeline")
+def ops_timeline(
+    range_key: str = Query("today", description="时间范围：today/week/month/all"),
+    end_ts: int | None = Query(None, description="可选覆盖结束时间，Unix 秒"),
+    env: str | None = Query(None, description="可选 .env 文件路径"),
+):
+    settings = get_settings(_resolve_env(env))
+    tz = ZoneInfo("Asia/Shanghai")
+    start_dt, default_end, bucket_seconds, cumulative = _normalize_time_range(range_key, tz)
+
+    if end_ts:
+        default_end = datetime.fromtimestamp(end_ts, tz)
+
+    rows = query_user_events(settings, int(start_dt.timestamp()), int(default_end.timestamp()))
+    start_ts = int(start_dt.timestamp())
+    end_ts_val = int(default_end.timestamp())
+    total_buckets = max(1, int((end_ts_val - start_ts) / bucket_seconds) + 1)
+
+    bucket_users: list[set[str]] = [set() for _ in range(total_buckets)]
+
+    def uid_key(uid, uname):
+        return str(uid) if uid is not None else (uname or "")
+
+    for uid, uname, _raw_json, _gift_id, _price, ts in rows:
+        if ts is None:
+            continue
+        key = uid_key(uid, uname)
+        if not key:
+            continue
+        if ts < start_ts or ts >= end_ts_val:
+            continue
+        idx = min(total_buckets - 1, max(0, int((ts - start_ts) // bucket_seconds)))
+        bucket_users[idx].add(key)
+
+    seen: set[str] = set()
+    points: list[dict] = []
+    for idx, users in enumerate(bucket_users):
+        if cumulative:
+            seen |= users
+            value = len(seen)
+        else:
+            value = len(users)
+
+        points.append({"ts": start_ts + idx * bucket_seconds, "value": value})
+
+    metric = "ONLINE_RANK_COUNT" if not cumulative else "WATCHED_CHANGE"
+    metric_label = "同时在线人数" if metric == "ONLINE_RANK_COUNT" else "累计进房人数"
+
+    return {
+        "range": range_key,
+        "start_ts": start_ts,
+        "end_ts": end_ts_val,
+        "bucket_seconds": bucket_seconds,
+        "metric": metric,
+        "metric_label": metric_label,
+        "points": points,
     }
 
 

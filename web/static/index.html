@@ -161,6 +161,50 @@
     .muted { color: var(--muted); }
     .flex-between { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      padding: 12px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      min-height: 220px;
+      overflow-x: auto;
+    }
+
+    .bar {
+      flex: 1;
+      min-width: 28px;
+      background: linear-gradient(180deg, rgba(56, 189, 248, 0.8), rgba(56, 189, 248, 0.25));
+      border-radius: 10px 10px 6px 6px;
+      position: relative;
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    .bar:hover { opacity: 0.9; transform: translateY(-2px); }
+
+    .bar::after {
+      content: attr(data-value);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translate(-50%, -6px);
+      color: #cbd5e1;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .bar-label {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 6px;
+    }
+
+    .bar-wrapper { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 36px; }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -692,8 +736,8 @@
       <div class="card">
         <div class="section-header" style="align-items: flex-start;">
           <div>
-            <h2>观众活跃度 / 回头率</h2>
-            <p class="hint">基于 UID 统计弹幕 / 送礼互动，衡量真实活跃观众。</p>
+            <h2>运营数据 · 大哥榜</h2>
+            <p class="hint">基于 UID 汇总发言、送礼与参与场次，可按需调整统计范围。</p>
           </div>
           <div class="row" style="gap:10px; align-items:flex-end; flex-wrap: wrap;">
             <label class="inline">场次数
@@ -705,16 +749,41 @@
             <label class="inline">最近一场结束
               <input id="opsEndTime" type="datetime-local" aria-label="最近一场结束时间" />
             </label>
-            <button id="btnLoadEngagement">刷新面板</button>
+            <label class="inline">排序依据
+              <select id="opsLeaderboardSort" aria-label="大哥榜排序">
+                <option value="total_price">送礼价值</option>
+                <option value="message_count">发言次数</option>
+                <option value="session_count">参与场次</option>
+                <option value="last_ts">最近出现</option>
+              </select>
+            </label>
+            <button id="btnLoadEngagement">刷新大哥榜</button>
           </div>
         </div>
 
         <div id="opsEngagementMeta" class="muted" style="margin-bottom:10px;"></div>
-        <div class="table-scroll" id="opsEngagementSessions"></div>
-
-        <h3 style="margin-top:16px;">观众画像</h3>
-        <p class="hint" style="margin-top:4px;">按 UID 聚合：参与场次、发言 / 送礼次数与弹幕平均长度。</p>
         <div class="table-scroll" id="opsEngagementUsers"></div>
+
+        <h3 style="margin-top:16px;">场次概览</h3>
+        <p class="hint" style="margin-top:4px;">本周期内每场的活跃、老观众与新人数量。</p>
+        <div class="table-scroll" id="opsEngagementSessions"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <div class="section-header" style="align-items: flex-start;">
+          <div>
+            <h2>观众趋势柱形图</h2>
+            <p class="hint">今日使用 5 分钟粒度；周/月/全部使用每日累计进房（WATCHED_CHANGE）估算。</p>
+          </div>
+          <div class="view-toggle" aria-label="时间视图切换">
+            <button class="toggle-btn active" data-ops-range="today">今日</button>
+            <button class="toggle-btn" data-ops-range="week">本周</button>
+            <button class="toggle-btn" data-ops-range="month">本月</button>
+            <button class="toggle-btn" data-ops-range="all">全部</button>
+          </div>
+        </div>
+        <div id="opsTimelineMeta" class="muted" style="margin-bottom:10px;"></div>
+        <div id="opsTimelineChart" class="bar-chart" aria-live="polite"></div>
       </div>
     </div>
   </div>
@@ -938,6 +1007,10 @@ const viewState = Object.fromEntries(
   Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false, settingsLoaded: false, latestPage: 1 }])
 );
 
+let opsUsersCache = [];
+let opsLeaderboardSortKey = "total_price";
+let opsTimelineRange = "today";
+
 const renderSearch = (records, targets) => {
   const summary = document.getElementById(targets.summary);
   const aggregated = document.getElementById(targets.aggregated);
@@ -1150,23 +1223,99 @@ const renderEngagementSessions = (sessions, lookback) => {
   );
 };
 
-const renderEngagementUsers = (users) => {
+const renderEngagementUsers = (users, sortKey = "total_price") => {
   const container = document.getElementById("opsEngagementUsers");
+  const sorted = [...users];
+
+  const fallbackTs = (v) => (v ? v : 0);
+  const sorters = {
+    total_price: (a, b) => (b.total_price || 0) - (a.total_price || 0),
+    message_count: (a, b) => (b.message_count || 0) - (a.message_count || 0),
+    session_count: (a, b) => (b.session_count || 0) - (a.session_count || 0),
+    last_ts: (a, b) => fallbackTs(b.last_ts) - fallbackTs(a.last_ts),
+  };
+
+  const sorter = sorters[sortKey] || sorters.total_price;
+  sorted.sort(sorter);
+
   renderTable(
     container,
-    users,
+    sorted,
     [
-      { key: "uid", label: "UID", className: "number", render: (v) => (v ?? "-") },
       { key: "uname", label: "用户名" },
-      { key: "session_count", label: "参与场次", className: "number" },
-      { key: "message_count", label: "发言/送礼数", className: "number" },
-      { key: "avg_length", label: "平均弹幕长度", className: "number" },
-      { key: "sent_gift", label: "送过礼物", render: (v) => (v ? "是" : "否") },
-      { key: "last_ts", label: "最近出现", render: (v) => fmtTime(v) },
+      { key: "message_count", label: "发言次数", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "送礼价值（元）", className: "number", render: (v) => fmtCurrency(v) },
+      { key: "session_count", label: "参与场次", className: "number", render: (v) => fmtNumber(v) },
+      { key: "last_ts", label: "上次出现", render: (v) => fmtTime(v) },
     ],
     "暂无观众画像"
   );
 };
+
+const renderOpsTimeline = (payload) => {
+  const container = document.getElementById("opsTimelineChart");
+  const meta = document.getElementById("opsTimelineMeta");
+  if (!container) return;
+
+  const points = payload?.points || [];
+  if (meta) {
+    meta.textContent = points.length
+      ? `${payload.metric_label || ""} · 从 ${fmtTime(payload.start_ts)} 到 ${fmtTime(payload.end_ts)}`
+      : "暂无数据";
+  }
+
+  if (!points.length) {
+    container.innerHTML = "<div class='empty'>没有可展示的数据</div>";
+    return;
+  }
+
+  const maxValue = Math.max(...points.map((p) => p.value || 0), 1);
+  container.innerHTML = "";
+
+  const labelFor = (ts) => {
+    const d = new Date(ts * 1000);
+    if (payload.range === "today") {
+      return d.toLocaleTimeString("zh-CN", { timeZone: TARGET_TIMEZONE, hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleDateString("zh-CN", { timeZone: TARGET_TIMEZONE, month: "2-digit", day: "2-digit" });
+  };
+
+  points.forEach((p) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "bar-wrapper";
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.dataset.value = fmtNumber(p.value || 0);
+    bar.style.height = `${Math.max(2, Math.round(((p.value || 0) / maxValue) * 100))}%`;
+    const label = document.createElement("div");
+    label.className = "bar-label";
+    label.textContent = labelFor(p.ts);
+    wrapper.appendChild(bar);
+    wrapper.appendChild(label);
+    container.appendChild(wrapper);
+  });
+};
+
+async function loadOpsTimeline(rangeKey = opsTimelineRange) {
+  const buttons = Array.from(document.querySelectorAll("[data-ops-range]"));
+  buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.opsRange === rangeKey));
+  opsTimelineRange = rangeKey;
+  const meta = document.getElementById("opsTimelineMeta");
+  const chart = document.getElementById("opsTimelineChart");
+  if (meta) meta.textContent = "加载中...";
+  if (chart) chart.innerHTML = "<div class='muted'>加载中...</div>";
+
+  try {
+    const params = new URLSearchParams({ range_key: rangeKey });
+    const resp = await fetch(buildUrl("/api/ops/timeline", params));
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    renderOpsTimeline(data);
+  } catch (err) {
+    if (meta) meta.textContent = `加载失败：${err.message || err}`;
+    if (chart) chart.innerHTML = "<div class='empty'>获取趋势数据失败</div>";
+  }
+}
 
 async function loadEngagementPanel() {
   const meta = document.getElementById("opsEngagementMeta");
@@ -1195,8 +1344,9 @@ async function loadEngagementPanel() {
         data.anchor_end_ts
       )}。`;
     }
+    opsUsersCache = data.users || [];
     renderEngagementSessions(data.sessions || [], data.lookback);
-    renderEngagementUsers(data.users || []);
+    renderEngagementUsers(opsUsersCache, opsLeaderboardSortKey);
     viewState.ops.loadedAll = true;
   } catch (err) {
     if (meta) meta.textContent = `加载失败：${err.message || err}`;
@@ -1650,7 +1800,15 @@ const initView = (viewKey) => {
   if (viewKey === "ops") {
     setNowTime("opsEndTime");
     document.getElementById("btnLoadEngagement")?.addEventListener("click", loadEngagementPanel);
+    document.getElementById("opsLeaderboardSort")?.addEventListener("change", (e) => {
+      opsLeaderboardSortKey = e.target.value || "total_price";
+      renderEngagementUsers(opsUsersCache, opsLeaderboardSortKey);
+    });
+    document.querySelectorAll("[data-ops-range]").forEach((btn) => {
+      btn.addEventListener("click", () => loadOpsTimeline(btn.dataset.opsRange));
+    });
     loadEngagementPanel();
+    loadOpsTimeline();
   } else if (viewKey === "console") {
     resetConsoleFilters();
     document.getElementById("btnConsoleFilter")?.addEventListener("click", loadConsoleRecords);
