@@ -125,6 +125,19 @@ class IngestPipeline:
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
             return
+
+        if cmd in SUPPORTED_GIFT_CMDS and not gift_like:
+            data = event.get("data")
+            if not isinstance(data, dict):
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    self.logger.debug(
+                        "忽略缺少礼物字段的事件 cmd=%s data_type=%s keys=%s",
+                        cmd,
+                        type(data).__name__,
+                        list(event.keys()),
+                    )
+                return
+
         if cmd and self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("收到事件 cmd=%s keys=%s", cmd, list(event.keys()))
         gift: Optional[GiftEvent]
