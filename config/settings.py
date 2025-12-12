@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Mapping, MutableMapping, Optional
+from typing import Dict, List, Mapping, MutableMapping, Optional
 from dotenv import dotenv_values, load_dotenv
 
 def _detect_env_file_from_argv() -> str | None:
@@ -95,6 +95,9 @@ class Settings:
     blind_box_template: str
     blind_box_send_danmaku: bool
 
+    gift_price_by_id: Dict[int, int]
+    gift_price_by_name: Dict[str, int]
+
     bili_client: str
 
 
@@ -179,6 +182,36 @@ def get_settings(env_file: str | None = None) -> Settings:
     )
     blind_box_send_danmaku = _get_env("BLIND_BOX_SEND_DANMAKU", "1", env) == "1"
 
+    def _parse_price_cache(raw: str) -> tuple[Dict[int, int], Dict[str, int]]:
+        by_id: Dict[int, int] = {}
+        by_name: Dict[str, int] = {}
+        if not raw:
+            return by_id, by_name
+        try:
+            import json
+
+            payload = json.loads(raw)
+            if isinstance(payload, dict):
+                for key, value in (payload.get("by_id") or {}).items():
+                    try:
+                        gid = int(key)
+                        by_id[gid] = int(value)
+                    except Exception:
+                        continue
+                for key, value in (payload.get("by_name") or {}).items():
+                    try:
+                        name = str(key).strip()
+                        if name:
+                            by_name[name] = int(value)
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
+        return by_id, by_name
+
+    price_by_id, price_by_name = _parse_price_cache(_get_env("GIFT_PRICE_CACHE", "", env))
+
     return Settings(
         room_id=room_id,
         target_gifts=target_gifts,
@@ -215,6 +248,9 @@ def get_settings(env_file: str | None = None) -> Settings:
         blind_box_rewards=blind_box_rewards,
         blind_box_template=blind_box_template,
         blind_box_send_danmaku=blind_box_send_danmaku,
+
+        gift_price_by_id=price_by_id,
+        gift_price_by_name=price_by_name,
 
         bili_client=_get_env("BILI_CLIENT", "aiohttp", env),
     )

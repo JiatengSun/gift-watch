@@ -56,6 +56,7 @@ copy .env.example .env
 - `BLIND_BOX_REWARDS`：盲盒可能开出的礼物名列表，默认包含电影票/棉花糖/爱心抱枕等；留空时会按除基础礼物外的全部已入库礼物统计产出。
 - `BLIND_BOX_TEMPLATE`：弹幕回复模板，支持 {uname} / {base_cost_yuan} / {reward_value_yuan} / {profit_yuan} 等占位符。
 - `BLIND_BOX_SEND_DANMAKU`：是否发送盈亏弹幕（默认 1，可关闭仅记录日志）。
+- 启动时会抓取礼物列表并填充 `GIFT_PRICE_CACHE` 环境变量，礼物价格以金瓜子计（1000:1 折算人民币），播报/统计会按礼物真实金额计算。
 - 盲盒的基础礼物不会入库也不会计入流水，盲盒开出的礼物会正常入库并计入流水，盈亏统计按“开出礼物数量×¥15”作为投入、礼物本身金额作为产出（若未配置奖励礼物列表，则按全部非基础礼物的金额计算产出）。
 
 感谢触发条件：同一用户（按 B 站 uid）在同一天送出的目标礼物累计数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。

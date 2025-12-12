@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
+import logging
 
 from config.settings import Settings
 from core.gift_parser import GiftEvent, GUARD_LEVEL_NAMES
 from db.sqlite import get_conn
+
+logger = logging.getLogger(__name__)
 
 
 def insert_gift(settings: Settings, gift: GiftEvent) -> None:
@@ -304,15 +307,55 @@ def query_blind_box_totals(
         where = " AND ".join(clauses)
         cur = conn.execute(
             f"""
-            SELECT COALESCE(SUM(total_price), 0) as total_price, COUNT(*) as record_count
+            SELECT
+              gift_id,
+              gift_name,
+              COALESCE(SUM(num), 0) as total_num,
+              COALESCE(SUM(total_price), 0) as total_price
             FROM gifts
             WHERE {where}
+            GROUP BY gift_id, gift_name
             """,
             params,
         )
-        row = cur.fetchone() or (0, 0)
-        total_price, record_count = row[0] or 0, row[1] or 0
-        return int(total_price), int(record_count)
+        rows = cur.fetchall() or []
+
+        reward_total = 0
+        total_reward_count = 0
+        price_details = []
+        for gift_id, gift_name, num_total, stored_total in rows:
+            num_total_int = int(num_total or 0)
+            total_reward_count += num_total_int
+
+            unit_price = None
+            if gift_id and gift_id in settings.gift_price_by_id:
+                unit_price = settings.gift_price_by_id[gift_id]
+            elif gift_name and gift_name in settings.gift_price_by_name:
+                unit_price = settings.gift_price_by_name[gift_name]
+
+            if unit_price is not None:
+                calculated_total = unit_price * max(num_total_int, 1)
+            else:
+                calculated_total = int(stored_total or 0)
+
+            reward_total += calculated_total
+
+            if logger.isEnabledFor(logging.DEBUG):
+                price_details.append(
+                    {
+                        "gift_id": gift_id,
+                        "gift_name": gift_name,
+                        "num": num_total_int,
+                        "unit_price": unit_price,
+                        "stored_total": int(stored_total or 0),
+                        "calculated_total": calculated_total,
+                    }
+                )
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("盲盒收益礼物明细: %s", price_details)
+
+        return reward_total, total_reward_count
 
     with get_conn(settings) as conn:
         reward_total, reward_count = _aggregate(conn, reward_gifts)

@@ -160,6 +160,8 @@ class IngestPipeline:
                 self.logger.debug("检测到礼物字段但解析失败 cmd=%s event=%s", cmd, event)
             return
 
+        self._apply_gift_price(gift)
+
         blind_box_base = self.settings.blind_box_base_gift.strip()
         if blind_box_base and gift.gift_name.strip() == blind_box_base:
             self.logger.debug("跳过盲盒基础礼物入库 gift=%s", gift.gift_name)
@@ -324,6 +326,42 @@ class IngestPipeline:
             return False
         self._blind_box_cooldown[key] = ts
         return True
+
+    def _apply_gift_price(self, gift: GiftEvent) -> None:
+        unit_price = None
+        if gift.gift_id and gift.gift_id in self.settings.gift_price_by_id:
+            unit_price = self.settings.gift_price_by_id[gift.gift_id]
+        elif gift.gift_name and gift.gift_name in self.settings.gift_price_by_name:
+            unit_price = self.settings.gift_price_by_name[gift.gift_name]
+
+        if unit_price is None:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug(
+                    "未找到礼物单价，沿用原始金额 gift_id=%s gift_name=%s raw_total=%s",
+                    gift.gift_id,
+                    gift.gift_name,
+                    gift.total_price,
+                )
+            return
+
+        try:
+            qty = max(int(gift.num), 1)
+        except Exception:
+            qty = 1
+
+        computed = unit_price * qty
+        if gift.total_price != computed:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug(
+                    "应用礼物价格缓存 gift_id=%s gift_name=%s 单价=%s 数量=%s 覆盖总价 %s -> %s",
+                    gift.gift_id,
+                    gift.gift_name,
+                    unit_price,
+                    qty,
+                    gift.total_price,
+                    computed,
+                )
+            gift.total_price = computed
 
     async def _handle_blind_box_query(self, event: dict[str, Any]) -> None:
         if not self.settings.blind_box_enabled:
