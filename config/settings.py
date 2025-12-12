@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Mapping, MutableMapping, Optional
+from typing import Dict, List, Mapping, MutableMapping, Optional
 from dotenv import dotenv_values, load_dotenv
 
 def _detect_env_file_from_argv() -> str | None:
@@ -49,6 +49,14 @@ def _split_lines(s: str) -> List[str]:
     normalized = (s or "").replace("\\n", "\n")
     return [line.strip() for line in normalized.splitlines() if line.strip()]
 
+
+def _split_phrases(s: str) -> List[str]:
+    normalized = (s or "").replace("\\n", "\n").replace("，", ",")
+    parts: list[str] = []
+    for chunk in normalized.split("\n"):
+        parts.extend([p.strip() for p in chunk.split(",") if p.strip()])
+    return parts
+
 @dataclass(frozen=True)
 class Settings:
     room_id: int
@@ -79,6 +87,16 @@ class Settings:
     announce_skip_offline: bool
     announce_mode: str
     announce_danmaku_threshold: int
+
+    blind_box_enabled: bool
+    blind_box_triggers: List[str]
+    blind_box_base_gift: str
+    blind_box_rewards: List[str]
+    blind_box_template: str
+    blind_box_send_danmaku: bool
+
+    gift_price_by_id: Dict[int, int]
+    gift_price_by_name: Dict[str, int]
 
     bili_client: str
 
@@ -145,6 +163,55 @@ def get_settings(env_file: str | None = None) -> Settings:
     announce_mode = announce_mode if announce_mode in {"interval", "message_count"} else "interval"
     announce_danmaku_threshold = max(int(_get_env("ANNOUNCE_DANMAKU_THRESHOLD", "5", env)), 1)
 
+    blind_box_enabled = _get_env("BLIND_BOX_ENABLED", "1", env) == "1"
+    blind_box_triggers = _split_phrases(
+        _get_env("BLIND_BOX_TRIGGERS", "查询盲盒,查询心动盲盒盈亏", env)
+    )
+    blind_box_base_gift = _get_env("BLIND_BOX_BASE_GIFT", "心动盲盒", env).strip() or "心动盲盒"
+    blind_box_rewards = _split_phrases(
+        _get_env(
+            "BLIND_BOX_REWARDS",
+            "电影票,棉花糖,爱心抱枕,绮彩权杖,时空之站,欢喜萌兔,浪漫城堡",
+            env,
+        )
+    )
+    blind_box_template = _get_env(
+        "BLIND_BOX_TEMPLATE",
+        "{uname} 心动盲盒投入¥{base_cost_yuan}，产出¥{reward_value_yuan}，盈亏¥{profit_yuan}",
+        env,
+    )
+    blind_box_send_danmaku = _get_env("BLIND_BOX_SEND_DANMAKU", "1", env) == "1"
+
+    def _parse_price_cache(raw: str) -> tuple[Dict[int, int], Dict[str, int]]:
+        by_id: Dict[int, int] = {}
+        by_name: Dict[str, int] = {}
+        if not raw:
+            return by_id, by_name
+        try:
+            import json
+
+            payload = json.loads(raw)
+            if isinstance(payload, dict):
+                for key, value in (payload.get("by_id") or {}).items():
+                    try:
+                        gid = int(key)
+                        by_id[gid] = int(value)
+                    except Exception:
+                        continue
+                for key, value in (payload.get("by_name") or {}).items():
+                    try:
+                        name = str(key).strip()
+                        if name:
+                            by_name[name] = int(value)
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
+        return by_id, by_name
+
+    price_by_id, price_by_name = _parse_price_cache(_get_env("GIFT_PRICE_CACHE", "", env))
+
     return Settings(
         room_id=room_id,
         target_gifts=target_gifts,
@@ -174,6 +241,16 @@ def get_settings(env_file: str | None = None) -> Settings:
         announce_skip_offline=announce_skip_offline,
         announce_mode=announce_mode,
         announce_danmaku_threshold=announce_danmaku_threshold,
+
+        blind_box_enabled=blind_box_enabled,
+        blind_box_triggers=blind_box_triggers,
+        blind_box_base_gift=blind_box_base_gift,
+        blind_box_rewards=blind_box_rewards,
+        blind_box_template=blind_box_template,
+        blind_box_send_danmaku=blind_box_send_danmaku,
+
+        gift_price_by_id=price_by_id,
+        gift_price_by_name=price_by_name,
 
         bili_client=_get_env("BILI_CLIENT", "aiohttp", env),
     )
