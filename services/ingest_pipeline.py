@@ -15,7 +15,7 @@ from core.gift_parser import (
     parse_guard_buy,
     parse_send_gift,
 )
-from db.repo import insert_gift
+from db.repo import insert_gift, query_blind_box_totals
 from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
 from core.rate_limiter import RateLimiter
 from core.danmaku_sender import DanmakuSender
@@ -50,6 +50,7 @@ class IngestPipeline:
         self._threshold_hits: Dict[Any, int] = {}
         self._daily_counter = DailyGiftCounter()
         self._user_day_thanks: Dict[Any, int] = {}
+        self._blind_box_cooldown: Dict[Any, float] = {}
 
     def _refresh_sender(self) -> None:
         if not self.settings.bot_sessdata or not self.settings.bot_bili_jct:
@@ -98,6 +99,7 @@ class IngestPipeline:
         self._daily_counter = DailyGiftCounter()
         self._user_day_thanks = {}
         self._thanks_day = None
+        self._blind_box_cooldown = {}
         self._refresh_sender()
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
@@ -115,6 +117,9 @@ class IngestPipeline:
         cmd = event.get("cmd") or event.get("command") or event.get("type")
         if cmd and "cmd" not in event:
             event["cmd"] = cmd
+        if cmd == "DANMU_MSG":
+            await self._handle_blind_box_query(event)
+            return
         if cmd and cmd not in SUPPORTED_GIFT_CMDS:
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
@@ -178,6 +183,125 @@ class IngestPipeline:
 
         self._threshold_hits[key] = reached
         self._buffer_thanks(gift)
+
+    def _parse_danmaku_event(self, event: dict[str, Any]) -> tuple[int | None, str, str] | None:
+        data = event
+        if isinstance(event.get("data"), dict):
+            data = event.get("data") or {}
+
+        info = data.get("info") or event.get("info")
+        if isinstance(info, dict):  # 某些封装会把 info 放到 data.data 下
+            info = info.get("info")
+        if not isinstance(info, (list, tuple)) or len(info) < 3:
+            return None
+
+        try:
+            content = str(info[1] or "").strip()
+        except Exception:
+            content = ""
+        if not content:
+            return None
+
+        uid: int | None = None
+        uname = ""
+        user_info = info[2] if len(info) > 2 else None
+        if isinstance(user_info, (list, tuple)) and len(user_info) >= 2:
+            try:
+                uid_val = int(user_info[0] or 0)
+                uid = uid_val if uid_val > 0 else None
+            except Exception:
+                uid = None
+            try:
+                uname = str(user_info[1] or "").strip()
+            except Exception:
+                uname = ""
+
+        if not uname:
+            uname = str(event.get("uname") or event.get("user") or "").strip()
+
+        return uid, uname, content
+
+    def _is_blind_box_trigger(self, content: str) -> bool:
+        triggers = [t.strip().lower() for t in self.settings.blind_box_triggers if t.strip()]
+        if not triggers:
+            return False
+        return content.strip().lower() in triggers
+
+    def _format_currency(self, coins: int) -> str:
+        return f"{coins / 1000:.2f}"
+
+    def _render_template(self, template: str, **kwargs: object) -> str:
+        try:
+            return template.format(**kwargs)
+        except Exception:
+            return template
+
+    def _should_reply_blind_box(self, key: Any, ts: float) -> bool:
+        cooldown_sec = 5
+        last_ts = self._blind_box_cooldown.get(key)
+        if last_ts is not None and ts - last_ts < cooldown_sec:
+            return False
+        self._blind_box_cooldown[key] = ts
+        return True
+
+    async def _handle_blind_box_query(self, event: dict[str, Any]) -> None:
+        if not self.settings.blind_box_enabled:
+            return
+
+        parsed = self._parse_danmaku_event(event)
+        if parsed is None:
+            return
+        uid, uname, content = parsed
+        if not uname and uid is None:
+            return
+
+        if not self._is_blind_box_trigger(content):
+            return
+
+        ts = time.time()
+        key = uid or f"guest:{uname}"
+        if not self._should_reply_blind_box(key, ts):
+            return
+
+        base_total, reward_total = query_blind_box_totals(
+            self.settings,
+            uid=uid,
+            uname=uname or None,
+            base_gift=self.settings.blind_box_base_gift,
+            reward_gifts=self.settings.blind_box_rewards,
+        )
+        profit = reward_total - base_total
+
+        context = {
+            "uname": uname or "神秘人",
+            "uid": uid or "",
+            "base_cost": base_total,
+            "reward_value": reward_total,
+            "profit": profit,
+            "base_cost_yuan": self._format_currency(base_total),
+            "reward_value_yuan": self._format_currency(reward_total),
+            "profit_yuan": self._format_currency(profit),
+            "profit_sign": "+" if profit >= 0 else "-",
+            "base_gift": self.settings.blind_box_base_gift,
+        }
+
+        message = self._render_template(self.settings.blind_box_template, **context)
+
+        self.logger.info(
+            "盲盒查询：uid=%s uname=%s 触发词=%s 投入=%s 产出=%s 盈亏=%s",
+            uid,
+            context["uname"],
+            content,
+            base_total,
+            reward_total,
+            profit,
+        )
+
+        if self.settings.blind_box_send_danmaku and self.sender:
+            try:
+                await self.sender.send_custom_message(message)
+            except Exception:
+                self.logger.exception("发送盲盒盈亏弹幕失败")
 
     def _user_key(self, gift: GiftEvent) -> Any:
         return gift.uid or f"guest:{gift.uname}"
