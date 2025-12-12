@@ -327,21 +327,35 @@ class IngestPipeline:
 
     async def _handle_blind_box_query(self, event: dict[str, Any]) -> None:
         if not self.settings.blind_box_enabled:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("盲盒查询已关闭，忽略弹幕事件")
             return
 
         parsed = self._parse_danmaku_event(event)
         if parsed is None:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("盲盒查询解析弹幕失败 event_keys=%s", list(event.keys()))
             return
         uid, uname, content = parsed
         if not uname and uid is None:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("盲盒查询缺少用户信息 content=%s", content)
             return
 
         if not self._is_blind_box_trigger(content):
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug(
+                    "弹幕未命中盲盒触发词 content=%s triggers=%s",
+                    content,
+                    self.settings.blind_box_triggers,
+                )
             return
 
         ts = time.time()
         key = uid or f"guest:{uname}"
         if not self._should_reply_blind_box(key, ts):
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug("盲盒查询冷却中 uid=%s uname=%s", uid, uname)
             return
 
         base_total, reward_total = query_blind_box_totals(
@@ -390,6 +404,12 @@ class IngestPipeline:
                 await self.sender.send_custom_message(message)
             except Exception:
                 self.logger.exception("发送盲盒盈亏弹幕失败")
+        elif self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                "盲盒查询已计算但未发送弹幕 send_enabled=%s sender_present=%s",
+                self.settings.blind_box_send_danmaku,
+                bool(self.sender),
+            )
 
     def _user_key(self, gift: GiftEvent) -> Any:
         return gift.uid or f"guest:{gift.uname}"
