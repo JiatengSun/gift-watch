@@ -49,6 +49,9 @@ copy .env.example .env
 - `THANK_GUARD`（默认 0，设置为 1 时对大航海 GUARD_BUY 发送“感谢xxx的yy！！你最帅了！”弹幕）
 - 小号的 `BOT_SESSDATA / BOT_BILI_JCT / BOT_BUVID3`
 - `DANMAKU_MAX_LENGTH`：弹幕最大长度（默认 20，超长时会自动截断并重发，避免接口报 1003212 超长错误）。
+- `DANMAKU_QUEUE_ENABLED`：是否启用持久化弹幕队列（默认 1），多实例/多端口可共用同一队列。
+- `DANMAKU_QUEUE_INTERVAL_SEC`：全局弹幕发送间隔（默认 3s）。
+- `DANMAKU_QUEUE_DB_PATH`：队列数据库路径（默认与 `DB_PATH` 相同）。
 
 盲盒盈亏查询可在控制台配置，也可以按需调整以下环境变量：
 - `BLIND_BOX_ENABLED`：是否开启弹幕查询（默认 1）。
