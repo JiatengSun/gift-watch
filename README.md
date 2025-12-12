@@ -48,6 +48,17 @@ copy .env.example .env
 - `THANK_PER_USER_DAILY`（默认 1，表示每个用户每天只感谢一次）
 - `THANK_GUARD`（默认 0，设置为 1 时对大航海 GUARD_BUY 发送“感谢xxx的yy！！你最帅了！”弹幕）
 - 小号的 `BOT_SESSDATA / BOT_BILI_JCT / BOT_BUVID3`
+- `DANMAKU_MAX_LENGTH`：弹幕最大长度（默认 20，超长时会自动截断并重发，避免接口报 1003212 超长错误）。
+
+盲盒盈亏查询可在控制台配置，也可以按需调整以下环境变量：
+- `BLIND_BOX_ENABLED`：是否开启弹幕查询（默认 1）。
+- `BLIND_BOX_TRIGGERS`：触发短句，逗号或换行分隔，默认包含 `查询盲盒` 与 `查询心动盲盒盈亏`。
+- `BLIND_BOX_BASE_GIFT`：盲盒基础礼物名，默认 `心动盲盒`。
+- `BLIND_BOX_REWARDS`：盲盒可能开出的礼物名列表，默认包含电影票/棉花糖/爱心抱枕等；留空时会按除基础礼物外的全部已入库礼物统计产出。
+- `BLIND_BOX_TEMPLATE`：弹幕回复模板，支持 {uname} / {base_cost_yuan} / {reward_value_yuan} / {profit_yuan} 等占位符。
+- `BLIND_BOX_SEND_DANMAKU`：是否发送盈亏弹幕（默认 1，可关闭仅记录日志）。
+- 启动时会抓取礼物列表并填充 `GIFT_PRICE_CACHE` 环境变量，礼物价格以金瓜子计（1000:1 折算人民币），播报/统计会按礼物真实金额计算。
+- 盲盒的基础礼物不会入库也不会计入流水，盲盒开出的礼物会正常入库并计入流水，盈亏统计按“开出礼物数量×¥15”作为投入、礼物本身金额作为产出（若未配置奖励礼物列表，则按全部非基础礼物的金额计算产出）。
 
 盲盒盈亏查询可在控制台配置，也可以按需调整以下环境变量：
 - `BLIND_BOX_ENABLED`：是否开启弹幕查询（默认 1）。

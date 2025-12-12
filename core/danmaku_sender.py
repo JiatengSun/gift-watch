@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import Mapping, Optional
+import logging
 
 from bilibili_api import live, Credential
+from bilibili_api.exceptions import ResponseCodeException
 
 class DanmakuSender:
     def __init__(
@@ -13,6 +15,7 @@ class DanmakuSender:
         thank_message_single: str,
         thank_message_summary: str,
         thank_message_guard: str,
+        max_length: int,
     ):
         self.room_id = room_id
         self.credential = credential
@@ -20,6 +23,8 @@ class DanmakuSender:
         self._thank_message_single = thank_message_single
         self._thank_message_summary = thank_message_summary
         self._thank_message_guard = thank_message_guard
+        self.max_length = max(0, max_length)
+        self.logger = logging.getLogger(__name__)
 
     def _get_room(self) -> live.LiveRoom:
         if self._room is None:
@@ -33,11 +38,32 @@ class DanmakuSender:
         except Exception:
             return template
 
+    def _trim(self, message: str) -> tuple[str, bool]:
+        if self.max_length and len(message) > self.max_length:
+            return message[: self.max_length], True
+        return message, False
+
     async def _send(self, message: str) -> None:
         if not message:
             return
+        trimmed, _ = self._trim(message.strip())
+        if not trimmed:
+            return
+
         room = self._get_room()
-        await room.send_danmaku(live.Danmaku(message))
+        try:
+            await room.send_danmaku(live.Danmaku(trimmed))
+        except ResponseCodeException as exc:
+            if exc.code == 1003212:
+                fallback_limit = max(1, (self.max_length or len(trimmed)) - 1)
+                fallback = trimmed[:fallback_limit]
+                if len(fallback) < len(trimmed):
+                    self.logger.warning(
+                        "弹幕超长已截断 length=%s->%s content=%s", len(message), len(fallback), trimmed
+                    )
+                    await room.send_danmaku(live.Danmaku(fallback))
+                    return
+            raise
 
     async def send_thanks(self, uname: str, gift_name: str, num: int = 1) -> None:
         msg = self._render(self._thank_message_single, uname=uname, gift_name=gift_name, num=num)
@@ -64,6 +90,7 @@ class DanmakuSender:
         thank_message_single: str | None = None,
         thank_message_summary: str | None = None,
         thank_message_guard: str | None = None,
+        max_length: int | None = None,
     ) -> None:
         if room_id is not None and room_id != self.room_id:
             self.room_id = room_id
@@ -77,3 +104,5 @@ class DanmakuSender:
             self._thank_message_summary = thank_message_summary
         if thank_message_guard is not None:
             self._thank_message_guard = thank_message_guard
+        if max_length is not None:
+            self.max_length = max(0, max_length)

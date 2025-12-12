@@ -65,6 +65,7 @@ class IngestPipeline:
                 thank_message_single=self.settings.thank_message_single,
                 thank_message_summary=self.settings.thank_message_summary,
                 thank_message_guard=self.settings.thank_message_guard,
+                max_length=self.settings.danmaku_max_length,
             )
             return
 
@@ -74,6 +75,7 @@ class IngestPipeline:
             thank_message_single=self.settings.thank_message_single,
             thank_message_summary=self.settings.thank_message_summary,
             thank_message_guard=self.settings.thank_message_guard,
+            max_length=self.settings.danmaku_max_length,
         )
 
     def _refresh_settings(self) -> None:

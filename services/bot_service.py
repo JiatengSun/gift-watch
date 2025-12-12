@@ -26,6 +26,7 @@ def build_pipeline(settings: Settings, settings_reloader: SettingsReloader | Non
             thank_message_single=settings.thank_message_single,
             thank_message_summary=settings.thank_message_summary,
             thank_message_guard=settings.thank_message_guard,
+            max_length=settings.danmaku_max_length,
         )
 
     return IngestPipeline(

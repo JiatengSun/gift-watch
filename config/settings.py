@@ -81,6 +81,8 @@ class Settings:
     thank_message_summary: str
     thank_message_guard: str
 
+    danmaku_max_length: int
+
     announce_enabled: bool
     announce_interval_sec: int
     announce_messages: List[str]
@@ -154,6 +156,8 @@ def get_settings(env_file: str | None = None) -> Settings:
     thank_message_guard = _get_env(
         "THANK_MESSAGE_GUARD", "感谢{uname}的{guard_name}！！你最帅了！", env
     )
+
+    danmaku_max_length = max(int(_get_env("DANMAKU_MAX_LENGTH", "20", env)), 0)
 
     announce_enabled = _get_env("ANNOUNCE_ENABLED", "0", env) == "1"
     announce_interval_sec = max(int(_get_env("ANNOUNCE_INTERVAL_SEC", "300", env)), 30)
@@ -234,6 +238,7 @@ def get_settings(env_file: str | None = None) -> Settings:
         thank_message_single=thank_message_single,
         thank_message_summary=thank_message_summary,
         thank_message_guard=thank_message_guard,
+        danmaku_max_length=danmaku_max_length,
 
         announce_enabled=announce_enabled,
         announce_interval_sec=announce_interval_sec,
