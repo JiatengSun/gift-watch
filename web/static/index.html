@@ -161,6 +161,124 @@
     .muted { color: var(--muted); }
     .flex-between { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      padding: 12px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      min-height: 220px;
+      overflow-x: auto;
+    }
+
+    .line-chart {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      min-height: 260px;
+      overflow: hidden;
+    }
+
+    .line-chart svg {
+      width: 100%;
+      height: auto;
+    }
+
+    .line-chart-grid line {
+      stroke: rgba(148, 163, 184, 0.15);
+      stroke-width: 1;
+    }
+
+    .line-chart-path {
+      fill: none;
+      stroke: #22d3ee;
+      stroke-width: 3;
+    }
+
+    .line-chart-area {
+      fill: url(#opsAreaFill);
+      stroke: none;
+    }
+
+    .line-chart-point {
+      fill: #38bdf8;
+      stroke: #0ea5e9;
+      stroke-width: 2;
+    }
+
+    .chart-label-row {
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      align-items: start;
+    }
+
+    .chart-label-row .label {
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bar {
+      flex: 1;
+      min-width: 28px;
+      background: linear-gradient(180deg, rgba(56, 189, 248, 0.8), rgba(56, 189, 248, 0.25));
+      border-radius: 10px 10px 6px 6px;
+      position: relative;
+      transition: opacity 120ms ease, transform 120ms ease;
+      min-height: 8px;
+    }
+
+    .bar:hover { opacity: 0.9; transform: translateY(-2px); }
+
+    .bar::after {
+      content: attr(data-value);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translate(-50%, -6px);
+      color: #cbd5e1;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .bar-label {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 6px;
+    }
+
+    .bar-wrapper { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 36px; }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pager button {
+      background: rgba(148, 163, 184, 0.12);
+      color: #e2e8f0;
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .pager button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -401,6 +519,7 @@
         <button class="toggle-btn active" data-view-target="desktop">桌面版</button>
         <button class="toggle-btn" data-view-target="mobile">手机专用</button>
         <button class="toggle-btn" data-view-target="tablet">平板专用</button>
+        <button class="toggle-btn" data-view-target="ops">运营数据</button>
         <button class="toggle-btn" data-view-target="console">控制台</button>
       </div>
     </div>
@@ -685,11 +804,68 @@
         </div>
       </div>
     </div>
+
+    <!-- 运营数据：面向分析的独立面板 -->
+    <div id="view-ops" class="view">
+      <div class="card">
+        <div class="section-header" style="align-items: flex-start;">
+          <div>
+            <h2>运营数据 · 大哥榜</h2>
+            <p class="hint">基于 UID 汇总发言、送礼与参与场次，可按需调整统计范围。</p>
+          </div>
+          <div class="row" style="gap:10px; align-items:flex-end; flex-wrap: wrap;">
+            <label class="inline">场次数
+              <input id="opsSessionCount" type="number" min="1" max="30" value="6" aria-label="需要统计的场次数" />
+            </label>
+            <label class="inline">老观众跨度
+              <input id="opsLookback" type="number" min="1" max="30" value="3" aria-label="老观众需要连续出现的场次" />
+            </label>
+            <label class="inline">最近一场结束
+              <input id="opsEndTime" type="datetime-local" aria-label="最近一场结束时间" />
+            </label>
+            <label class="inline">排序依据
+              <select id="opsLeaderboardSort" aria-label="大哥榜排序">
+                <option value="total_price">送礼价值</option>
+                <option value="message_count">发言次数</option>
+                <option value="session_count">参与场次</option>
+                <option value="last_ts">最近出现</option>
+              </select>
+            </label>
+            <button id="btnLoadEngagement">刷新大哥榜</button>
+          </div>
+        </div>
+
+        <div id="opsEngagementMeta" class="muted" style="margin-bottom:10px;"></div>
+        <div class="table-scroll" id="opsEngagementUsers"></div>
+
+        <h3 style="margin-top:16px;">场次概览</h3>
+        <p class="hint" style="margin-top:4px;">本周期内每场的活跃、老观众与新人数量。</p>
+        <div class="table-scroll" id="opsEngagementSessions"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <div class="section-header" style="align-items: flex-start;">
+          <div>
+            <h2>观众趋势柱形图</h2>
+            <p class="hint">今日使用 5 分钟粒度；周/月/全部使用每日累计进房（WATCHED_CHANGE）估算。</p>
+          </div>
+          <div class="view-toggle" aria-label="时间视图切换">
+            <button class="toggle-btn active" data-ops-range="today">今日</button>
+            <button class="toggle-btn" data-ops-range="week">本周</button>
+            <button class="toggle-btn" data-ops-range="month">本月</button>
+            <button class="toggle-btn" data-ops-range="all">全部</button>
+          </div>
+        </div>
+        <div id="opsTimelineMeta" class="muted" style="margin-bottom:10px;"></div>
+        <div id="opsTimelineChart" class="bar-chart" aria-live="polite"></div>
+      </div>
+    </div>
   </div>
 
 <script>
 const TARGET_TIMEZONE = "Asia/Shanghai";
 const LATEST_PAGE_SIZE = 50;
+const OPS_PAGE_SIZE = 10;
 
 const getTargetDateInfo = (date = new Date()) => {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -812,6 +988,46 @@ const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
   container.innerHTML = `<div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
 };
 
+const renderPaginatedTable = (container, rows, columns, emptyText, pageState) => {
+  if (!container) return;
+  if (!rows.length) {
+    container.innerHTML = `<div class="empty">${emptyText}</div>`;
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / OPS_PAGE_SIZE));
+  const page = Math.min(Math.max(pageState.page || 1, 1), totalPages);
+  pageState.page = page;
+  const start = (page - 1) * OPS_PAGE_SIZE;
+  const visible = rows.slice(start, start + OPS_PAGE_SIZE);
+
+  const header = columns.map((c) => `<th>${c.label}</th>`).join("");
+  const body = visible
+    .map((row) =>
+      `<tr>${columns
+        .map((c) => `<td class="${c.className || ''}">${c.render ? c.render(row[c.key], row) : row[c.key]}</td>`)
+        .join("")}</tr>`
+    )
+    .join("");
+
+  container.innerHTML = `
+    <div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="pager">
+      <button data-page="prev" ${page <= 1 ? "disabled" : ""}>上一页</button>
+      <span class="muted">第 ${page} / ${totalPages} 页</span>
+      <button data-page="next" ${page >= totalPages ? "disabled" : ""}>下一页</button>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.page === "prev" && pageState.page > 1) pageState.page -= 1;
+      if (btn.dataset.page === "next" && pageState.page < totalPages) pageState.page += 1;
+      renderPaginatedTable(container, rows, columns, emptyText, pageState);
+    });
+  });
+};
+
 const groupByGift = (records) => {
   const map = new Map();
   records.forEach((r) => {
@@ -894,6 +1110,9 @@ const viewConfigs = {
     },
     latest: { button: "btnLoadAll-tablet", output: "allOut-tablet" },
   },
+  ops: {
+    root: document.getElementById("view-ops"),
+  },
   console: {
     root: document.getElementById("view-console"),
   },
@@ -902,6 +1121,12 @@ const viewConfigs = {
 const viewState = Object.fromEntries(
   Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false, settingsLoaded: false, latestPage: 1 }])
 );
+
+let opsUsersCache = [];
+let opsLeaderboardSortKey = "total_price";
+let opsTimelineRange = "today";
+const opsUsersPagination = { page: 1 };
+const opsSessionsPagination = { page: 1 };
 
 const renderSearch = (records, targets) => {
   const summary = document.getElementById(targets.summary);
@@ -1090,6 +1315,275 @@ const setNowTime = (id) => {
   if (!el) return;
   el.value = nowDateTime().toISOString().slice(0, 16);
 };
+
+const renderEngagementSessions = (sessions, lookback) => {
+  const container = document.getElementById("opsEngagementSessions");
+  renderPaginatedTable(
+    container,
+    sessions,
+    [
+      { key: "label", label: "场次" },
+      {
+        key: "start_ts",
+        label: "时间范围",
+        render: (_, row) => `${fmtTime(row.start_ts)} - ${fmtTime(row.end_ts)}`,
+      },
+      { key: "active_count", label: "活跃观众", className: "number" },
+      {
+        key: "returning_count",
+        label: `老观众（连续${lookback}场）`,
+        className: "number",
+      },
+      { key: "new_count", label: "新人（本场首发）", className: "number" },
+    ],
+    "暂无场次数据",
+    opsSessionsPagination
+  );
+};
+
+const renderEngagementUsers = (users, sortKey = "total_price") => {
+  const container = document.getElementById("opsEngagementUsers");
+  const sorted = [...users];
+
+  const fallbackTs = (v) => (v ? v : 0);
+  const sorters = {
+    total_price: (a, b) => (b.total_price || 0) - (a.total_price || 0),
+    message_count: (a, b) => (b.message_count || 0) - (a.message_count || 0),
+    session_count: (a, b) => (b.session_count || 0) - (a.session_count || 0),
+    last_ts: (a, b) => fallbackTs(b.last_ts) - fallbackTs(a.last_ts),
+  };
+
+  const sorter = sorters[sortKey] || sorters.total_price;
+  sorted.sort(sorter);
+
+  renderPaginatedTable(
+    container,
+    sorted,
+    [
+      { key: "uname", label: "用户名" },
+      { key: "message_count", label: "发言次数", className: "number", render: (v) => fmtNumber(v) },
+      { key: "total_price", label: "送礼价值（元）", className: "number", render: (v) => fmtCurrency(v) },
+      { key: "session_count", label: "参与场次", className: "number", render: (v) => fmtNumber(v) },
+      { key: "last_ts", label: "上次出现", render: (v) => fmtTime(v) },
+    ],
+    "暂无观众画像",
+    opsUsersPagination
+  );
+};
+
+const renderOpsTimeline = (payload) => {
+  const container = document.getElementById("opsTimelineChart");
+  const meta = document.getElementById("opsTimelineMeta");
+  if (!container) return;
+
+  container.classList.add("line-chart");
+
+  const rawPoints = payload?.points || [];
+  const compressPoints = (pts) => {
+    const maxBars = payload?.range === "today" ? 24 : 48;
+    if (pts.length <= maxBars) return pts;
+    const size = Math.max(1, Math.ceil(pts.length / maxBars));
+    const out = [];
+    for (let i = 0; i < pts.length; i += size) {
+      const chunk = pts.slice(i, i + size);
+      const ts = chunk[0].ts;
+      let value = 0;
+      if (payload?.metric === "ONLINE_RANK_COUNT") {
+        value = Math.round(chunk.reduce((acc, c) => acc + (c.value || 0), 0) / chunk.length);
+      } else {
+        value = chunk[chunk.length - 1].value || 0;
+      }
+      out.push({ ts, value });
+    }
+    return out;
+  };
+
+  const points = compressPoints(rawPoints);
+  if (meta) {
+    meta.textContent = points.length
+      ? `${payload.metric_label || ""} · 从 ${fmtTime(payload.start_ts)} 到 ${fmtTime(payload.end_ts)}`
+      : "暂无数据";
+  }
+
+  if (!points.length) {
+    container.innerHTML = "<div class='empty'>没有可展示的数据</div>";
+    return;
+  }
+
+  const values = points.map((p) => Number(p.value || 0)).filter((v) => v >= 0);
+  const maxValue = Math.max(...values, 1);
+  container.innerHTML = "";
+
+  const labelFor = (ts) => {
+    const d = new Date(ts * 1000);
+    if (payload.range === "today") {
+      return d.toLocaleTimeString("zh-CN", { timeZone: TARGET_TIMEZONE, hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleDateString("zh-CN", { timeZone: TARGET_TIMEZONE, month: "2-digit", day: "2-digit" });
+  };
+
+  const chartHeight = Math.max(container.clientHeight || container.offsetHeight || 0, 280);
+  const width = Math.max(container.clientWidth || container.offsetWidth || 0, 640);
+  const padding = { top: 12, right: 30, bottom: 36, left: 36 };
+  const innerHeight = Math.max(chartHeight - padding.top - padding.bottom, 120);
+  const innerWidth = Math.max(width - padding.left - padding.right, 200);
+  const step = points.length > 1 ? innerWidth / (points.length - 1) : 0;
+
+  const yFor = (v) => padding.top + (innerHeight - (Math.min(v, maxValue) / maxValue) * innerHeight);
+  const xFor = (idx) => padding.left + idx * step;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${chartHeight}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+
+  const defs = document.createElementNS(svg.namespaceURI, "defs");
+  const gradient = document.createElementNS(svg.namespaceURI, "linearGradient");
+  gradient.setAttribute("id", "opsAreaFill");
+  gradient.setAttribute("x1", "0");
+  gradient.setAttribute("y1", "0");
+  gradient.setAttribute("x2", "0");
+  gradient.setAttribute("y2", "1");
+
+  const stop1 = document.createElementNS(svg.namespaceURI, "stop");
+  stop1.setAttribute("offset", "0%");
+  stop1.setAttribute("stop-color", "rgba(56, 189, 248, 0.32)");
+  const stop2 = document.createElementNS(svg.namespaceURI, "stop");
+  stop2.setAttribute("offset", "100%");
+  stop2.setAttribute("stop-color", "rgba(56, 189, 248, 0.04)");
+  gradient.appendChild(stop1);
+  gradient.appendChild(stop2);
+  defs.appendChild(gradient);
+  svg.appendChild(defs);
+
+  const grid = document.createElementNS(svg.namespaceURI, "g");
+  grid.setAttribute("class", "line-chart-grid");
+  const gridLines = 4;
+  for (let i = 0; i <= gridLines; i++) {
+    const y = padding.top + (innerHeight / gridLines) * i;
+    const line = document.createElementNS(svg.namespaceURI, "line");
+    line.setAttribute("x1", padding.left);
+    line.setAttribute("x2", padding.left + innerWidth);
+    line.setAttribute("y1", y);
+    line.setAttribute("y2", y);
+    grid.appendChild(line);
+  }
+  svg.appendChild(grid);
+
+  const buildPath = (closeArea = false) => {
+    if (!points.length) return "";
+    const coords = points.map((p, idx) => [xFor(idx), yFor(p.value || 0)]);
+    let d = `M ${coords[0][0]} ${coords[0][1]}`;
+    coords.slice(1).forEach(([x, y]) => {
+      d += ` L ${x} ${y}`;
+    });
+    if (closeArea) {
+      d += ` L ${padding.left + innerWidth} ${padding.top + innerHeight}`;
+      d += ` L ${padding.left} ${padding.top + innerHeight} Z`;
+    }
+    return d;
+  };
+
+  const area = document.createElementNS(svg.namespaceURI, "path");
+  area.setAttribute("d", buildPath(true));
+  area.setAttribute("class", "line-chart-area");
+  svg.appendChild(area);
+
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute("d", buildPath(false));
+  path.setAttribute("class", "line-chart-path");
+  svg.appendChild(path);
+
+  const pointsGroup = document.createElementNS(svg.namespaceURI, "g");
+  points.forEach((p, idx) => {
+    const cx = xFor(idx);
+    const cy = yFor(p.value || 0);
+    const circle = document.createElementNS(svg.namespaceURI, "circle");
+    circle.setAttribute("cx", cx);
+    circle.setAttribute("cy", cy);
+    circle.setAttribute("r", 4);
+    circle.setAttribute("class", "line-chart-point");
+    circle.setAttribute("data-value", fmtNumber(p.value || 0));
+    const title = document.createElementNS(svg.namespaceURI, "title");
+    title.textContent = `${labelFor(p.ts)}: ${fmtNumber(p.value || 0)}`;
+    circle.appendChild(title);
+    pointsGroup.appendChild(circle);
+  });
+  svg.appendChild(pointsGroup);
+
+  container.appendChild(svg);
+
+  const labelsRow = document.createElement("div");
+  labelsRow.className = "chart-label-row";
+  labelsRow.style.gridTemplateColumns = `repeat(${points.length}, minmax(0, 1fr))`;
+  labelsRow.style.marginTop = "2px";
+  points.forEach((p) => {
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = labelFor(p.ts);
+    labelsRow.appendChild(label);
+  });
+  container.appendChild(labelsRow);
+};
+
+async function loadOpsTimeline(rangeKey = opsTimelineRange) {
+  const buttons = Array.from(document.querySelectorAll("[data-ops-range]"));
+  buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.opsRange === rangeKey));
+  opsTimelineRange = rangeKey;
+  const meta = document.getElementById("opsTimelineMeta");
+  const chart = document.getElementById("opsTimelineChart");
+  if (meta) meta.textContent = "加载中...";
+  if (chart) chart.innerHTML = "<div class='muted'>加载中...</div>";
+
+  try {
+    const params = new URLSearchParams({ range_key: rangeKey });
+    const resp = await fetch(buildUrl("/api/ops/timeline", params));
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    renderOpsTimeline(data);
+  } catch (err) {
+    if (meta) meta.textContent = `加载失败：${err.message || err}`;
+    if (chart) chart.innerHTML = "<div class='empty'>获取趋势数据失败</div>";
+  }
+}
+
+async function loadEngagementPanel() {
+  const meta = document.getElementById("opsEngagementMeta");
+  const sessionsBox = document.getElementById("opsEngagementSessions");
+  const usersBox = document.getElementById("opsEngagementUsers");
+  if (meta) meta.textContent = "加载中...";
+  if (sessionsBox) sessionsBox.innerHTML = "<div class='muted'>加载中...</div>";
+  if (usersBox) usersBox.innerHTML = "";
+
+  const params = new URLSearchParams();
+  const sessionCount = Number(getInputValue("opsSessionCount")) || 0;
+  const lookback = Number(getInputValue("opsLookback")) || 0;
+  const endTs = getDateInputSeconds("opsEndTime");
+  if (sessionCount) params.set("session_count", sessionCount);
+  if (lookback) params.set("lookback", lookback);
+  if (endTs) params.set("end_ts", endTs);
+
+  try {
+    const resp = await fetch(buildUrl("/api/ops/engagement", params));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (meta) {
+      meta.textContent = `最近 ${data.session_count} 场，老观众需连续 ${data.lookback} 场；最近一场截至 ${fmtTime(
+        data.anchor_end_ts
+      )}。`;
+    }
+    opsUsersPagination.page = 1;
+    opsSessionsPagination.page = 1;
+    opsUsersCache = data.users || [];
+    renderEngagementSessions(data.sessions || [], data.lookback);
+    renderEngagementUsers(opsUsersCache, opsLeaderboardSortKey);
+    viewState.ops.loadedAll = true;
+  } catch (err) {
+    if (meta) meta.textContent = `加载失败：${err.message || err}`;
+    if (sessionsBox) sessionsBox.innerHTML = "<div class='empty'>获取运营数据失败</div>";
+  }
+}
 
 const getDateInputSeconds = (id) => {
   const el = document.getElementById(id);
@@ -1534,7 +2028,20 @@ async function loadRoomGiftList() {
 
 const initView = (viewKey) => {
   const cfg = viewConfigs[viewKey];
-  if (viewKey === "console") {
+  if (viewKey === "ops") {
+    setNowTime("opsEndTime");
+    document.getElementById("btnLoadEngagement")?.addEventListener("click", loadEngagementPanel);
+    document.getElementById("opsLeaderboardSort")?.addEventListener("change", (e) => {
+      opsLeaderboardSortKey = e.target.value || "total_price";
+      opsUsersPagination.page = 1;
+      renderEngagementUsers(opsUsersCache, opsLeaderboardSortKey);
+    });
+    document.querySelectorAll("[data-ops-range]").forEach((btn) => {
+      btn.addEventListener("click", () => loadOpsTimeline(btn.dataset.opsRange));
+    });
+    loadEngagementPanel();
+    loadOpsTimeline();
+  } else if (viewKey === "console") {
     resetConsoleFilters();
     document.getElementById("btnConsoleFilter")?.addEventListener("click", loadConsoleRecords);
     document.getElementById("btnConsoleReset")?.addEventListener("click", () => {
