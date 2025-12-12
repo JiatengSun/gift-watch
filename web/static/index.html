@@ -401,6 +401,7 @@
         <button class="toggle-btn active" data-view-target="desktop">桌面版</button>
         <button class="toggle-btn" data-view-target="mobile">手机专用</button>
         <button class="toggle-btn" data-view-target="tablet">平板专用</button>
+        <button class="toggle-btn" data-view-target="ops">运营数据</button>
         <button class="toggle-btn" data-view-target="console">控制台</button>
       </div>
     </div>
@@ -685,6 +686,37 @@
         </div>
       </div>
     </div>
+
+    <!-- 运营数据：面向分析的独立面板 -->
+    <div id="view-ops" class="view">
+      <div class="card">
+        <div class="section-header" style="align-items: flex-start;">
+          <div>
+            <h2>观众活跃度 / 回头率</h2>
+            <p class="hint">基于 UID 统计弹幕 / 送礼互动，衡量真实活跃观众。</p>
+          </div>
+          <div class="row" style="gap:10px; align-items:flex-end; flex-wrap: wrap;">
+            <label class="inline">场次数
+              <input id="opsSessionCount" type="number" min="1" max="30" value="6" aria-label="需要统计的场次数" />
+            </label>
+            <label class="inline">老观众跨度
+              <input id="opsLookback" type="number" min="1" max="30" value="3" aria-label="老观众需要连续出现的场次" />
+            </label>
+            <label class="inline">最近一场结束
+              <input id="opsEndTime" type="datetime-local" aria-label="最近一场结束时间" />
+            </label>
+            <button id="btnLoadEngagement">刷新面板</button>
+          </div>
+        </div>
+
+        <div id="opsEngagementMeta" class="muted" style="margin-bottom:10px;"></div>
+        <div class="table-scroll" id="opsEngagementSessions"></div>
+
+        <h3 style="margin-top:16px;">观众画像</h3>
+        <p class="hint" style="margin-top:4px;">按 UID 聚合：参与场次、发言 / 送礼次数与弹幕平均长度。</p>
+        <div class="table-scroll" id="opsEngagementUsers"></div>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -894,6 +926,9 @@ const viewConfigs = {
     },
     latest: { button: "btnLoadAll-tablet", output: "allOut-tablet" },
   },
+  ops: {
+    root: document.getElementById("view-ops"),
+  },
   console: {
     root: document.getElementById("view-console"),
   },
@@ -1090,6 +1125,84 @@ const setNowTime = (id) => {
   if (!el) return;
   el.value = nowDateTime().toISOString().slice(0, 16);
 };
+
+const renderEngagementSessions = (sessions, lookback) => {
+  const container = document.getElementById("opsEngagementSessions");
+  renderTable(
+    container,
+    sessions,
+    [
+      { key: "label", label: "场次" },
+      {
+        key: "start_ts",
+        label: "时间范围",
+        render: (_, row) => `${fmtTime(row.start_ts)} - ${fmtTime(row.end_ts)}`,
+      },
+      { key: "active_count", label: "活跃观众", className: "number" },
+      {
+        key: "returning_count",
+        label: `老观众（连续${lookback}场）`,
+        className: "number",
+      },
+      { key: "new_count", label: "新人（本场首发）", className: "number" },
+    ],
+    "暂无场次数据"
+  );
+};
+
+const renderEngagementUsers = (users) => {
+  const container = document.getElementById("opsEngagementUsers");
+  renderTable(
+    container,
+    users,
+    [
+      { key: "uid", label: "UID", className: "number", render: (v) => (v ?? "-") },
+      { key: "uname", label: "用户名" },
+      { key: "session_count", label: "参与场次", className: "number" },
+      { key: "message_count", label: "发言/送礼数", className: "number" },
+      { key: "avg_length", label: "平均弹幕长度", className: "number" },
+      { key: "sent_gift", label: "送过礼物", render: (v) => (v ? "是" : "否") },
+      { key: "last_ts", label: "最近出现", render: (v) => fmtTime(v) },
+    ],
+    "暂无观众画像"
+  );
+};
+
+async function loadEngagementPanel() {
+  const meta = document.getElementById("opsEngagementMeta");
+  const sessionsBox = document.getElementById("opsEngagementSessions");
+  const usersBox = document.getElementById("opsEngagementUsers");
+  if (meta) meta.textContent = "加载中...";
+  if (sessionsBox) sessionsBox.innerHTML = "<div class='muted'>加载中...</div>";
+  if (usersBox) usersBox.innerHTML = "";
+
+  const params = new URLSearchParams();
+  const sessionCount = Number(getInputValue("opsSessionCount")) || 0;
+  const lookback = Number(getInputValue("opsLookback")) || 0;
+  const endTs = getDateInputSeconds("opsEndTime");
+  if (sessionCount) params.set("session_count", sessionCount);
+  if (lookback) params.set("lookback", lookback);
+  if (endTs) params.set("end_ts", endTs);
+
+  try {
+    const resp = await fetch(buildUrl("/api/ops/engagement", params));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (meta) {
+      meta.textContent = `最近 ${data.session_count} 场，老观众需连续 ${data.lookback} 场；最近一场截至 ${fmtTime(
+        data.anchor_end_ts
+      )}。`;
+    }
+    renderEngagementSessions(data.sessions || [], data.lookback);
+    renderEngagementUsers(data.users || []);
+    viewState.ops.loadedAll = true;
+  } catch (err) {
+    if (meta) meta.textContent = `加载失败：${err.message || err}`;
+    if (sessionsBox) sessionsBox.innerHTML = "<div class='empty'>获取运营数据失败</div>";
+  }
+}
 
 const getDateInputSeconds = (id) => {
   const el = document.getElementById(id);
@@ -1534,7 +1647,11 @@ async function loadRoomGiftList() {
 
 const initView = (viewKey) => {
   const cfg = viewConfigs[viewKey];
-  if (viewKey === "console") {
+  if (viewKey === "ops") {
+    setNowTime("opsEndTime");
+    document.getElementById("btnLoadEngagement")?.addEventListener("click", loadEngagementPanel);
+    loadEngagementPanel();
+  } else if (viewKey === "console") {
     resetConsoleFilters();
     document.getElementById("btnConsoleFilter")?.addEventListener("click", loadConsoleRecords);
     document.getElementById("btnConsoleReset")?.addEventListener("click", () => {
