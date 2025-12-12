@@ -77,6 +77,8 @@ class Settings:
     announce_interval_sec: int
     announce_messages: List[str]
     announce_skip_offline: bool
+    announce_mode: str
+    announce_danmaku_threshold: int
 
     bili_client: str
 
@@ -139,6 +141,9 @@ def get_settings(env_file: str | None = None) -> Settings:
     announce_interval_sec = max(int(_get_env("ANNOUNCE_INTERVAL_SEC", "300", env)), 30)
     announce_messages = _split_lines(_get_env("ANNOUNCE_MESSAGE", "主播报时：感谢陪伴~", env))
     announce_skip_offline = _get_env("ANNOUNCE_SKIP_OFFLINE", "1", env) == "1"
+    announce_mode = _get_env("ANNOUNCE_MODE", "interval", env)
+    announce_mode = announce_mode if announce_mode in {"interval", "message_count"} else "interval"
+    announce_danmaku_threshold = max(int(_get_env("ANNOUNCE_DANMAKU_THRESHOLD", "5", env)), 1)
 
     return Settings(
         room_id=room_id,
@@ -167,6 +172,8 @@ def get_settings(env_file: str | None = None) -> Settings:
         announce_interval_sec=announce_interval_sec,
         announce_messages=announce_messages,
         announce_skip_offline=announce_skip_offline,
+        announce_mode=announce_mode,
+        announce_danmaku_threshold=announce_danmaku_threshold,
 
         bili_client=_get_env("BILI_CLIENT", "aiohttp", env),
     )
