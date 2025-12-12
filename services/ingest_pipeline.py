@@ -333,7 +333,12 @@ class IngestPipeline:
         return any(t and t in content_lower for t in triggers)
 
     def _format_currency(self, coins: int) -> str:
-        return f"{coins / 1000:.2f}"
+        try:
+            # 金瓜子换算后的金额应为整数，去掉多余小数位以节省弹幕长度
+            value = int(round(coins / 1000))
+            return str(value)
+        except Exception:
+            return f"{coins / 1000:.2f}"
 
     def _render_template(self, template: str, **kwargs: object) -> str:
         try:
