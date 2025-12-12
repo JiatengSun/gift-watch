@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, time, timedelta
+import json
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
+from zoneinfo import ZoneInfo
 
 from config.env_store import save_env
 from config.settings import DEFAULT_ENV_FILE, Settings, get_settings, resolve_env_file
@@ -15,6 +18,7 @@ from db.repo import (
     query_recent_gifts_paginated,
     query_recent_gifts,
     query_flow_summary,
+    query_user_events,
 )
 from services.gift_list_service import fetch_room_gift_list
 
@@ -130,6 +134,35 @@ def _default_start_ts(now: datetime) -> int:
     if eight_am > now:
         eight_am = eight_am - timedelta(days=1)
     return int(eight_am.timestamp())
+
+
+def _align_session_start(dt: datetime, session_start_hour: int = 8) -> datetime:
+    anchor = dt.replace(hour=session_start_hour, minute=0, second=0, microsecond=0)
+    if dt < anchor:
+        anchor = anchor - timedelta(days=1)
+    return anchor
+
+
+def _extract_message_length(raw_json: str) -> int:
+    try:
+        data = json.loads(raw_json)
+    except Exception:
+        return 0
+
+    text = ""
+    if isinstance(data, dict):
+        for key in ("msg", "message", "content", "text"):
+            val = data.get(key)
+            if isinstance(val, str) and val.strip():
+                text = val.strip()
+                break
+
+        if not text:
+            info = data.get("info")
+            if isinstance(info, (list, tuple)) and len(info) > 1 and isinstance(info[1], str):
+                text = info[1].strip()
+
+    return len(text)
 
 
 @router.get("/api/search")
@@ -277,6 +310,123 @@ def delete_gift(gift_id: int, env: str | None = Query(None, description="可选 
     if not deleted:
         raise HTTPException(status_code=404, detail="记录不存在或已删除")
     return {"deleted": True, "id": gift_id}
+
+
+@router.get("/api/ops/engagement")
+def engagement_panel(
+    session_count: int = Query(6, ge=1, le=30, description="需要统计的场次数"),
+    lookback: int = Query(3, ge=1, le=30, description="老观众需要连续出现的场次"),
+    end_ts: int | None = Query(None, description="最近一场的结束时间（Unix 秒），默认当前时间"),
+    env: str | None = Query(None, description="可选 .env 文件路径"),
+):
+    settings = get_settings(_resolve_env(env))
+    tz = ZoneInfo("Asia/Shanghai")
+    now = datetime.now(tz)
+    anchor_end = datetime.fromtimestamp(end_ts, tz) if end_ts else now
+
+    effective_lookback = max(min(lookback, session_count - 1), 1) if session_count > 1 else 1
+    aligned_start = _align_session_start(anchor_end)
+    aligned_end = aligned_start + timedelta(days=1)
+
+    ranges: list[tuple[datetime, datetime]] = []
+    cur_start, cur_end = aligned_start, aligned_end
+    for _ in range(session_count):
+        ranges.append((cur_start, cur_end))
+        cur_end = cur_start
+        cur_start = cur_start - timedelta(days=1)
+    ranges.reverse()
+
+    session_users: list[set[str]] = []
+    seen_users: set[str] = set()
+    user_stats: dict[str, dict] = defaultdict(
+        lambda: {
+            "uid": None,
+            "uname": "",
+            "sessions": set(),
+            "message_count": 0,
+            "total_length": 0,
+            "sent_gift": False,
+            "first_ts": None,
+            "last_ts": None,
+        }
+    )
+
+    session_rows: list[dict] = []
+
+    for idx, (start_dt, end_dt) in enumerate(ranges):
+        rows = query_user_events(settings, int(start_dt.timestamp()), int(end_dt.timestamp()))
+        users_this_session: set[str] = set()
+
+        for uid, uname, raw_json, gift_id, total_price, ts in rows:
+            key = str(uid) if uid is not None else (uname or "")
+            if not key:
+                continue
+
+            profile = user_stats[key]
+            profile["uid"] = uid
+            profile["uname"] = uname
+            profile["sessions"].add(idx)
+            profile["message_count"] += 1
+            profile["total_length"] += _extract_message_length(raw_json or "")
+            profile["sent_gift"] = profile["sent_gift"] or bool(gift_id) or (total_price or 0) > 0
+            profile["first_ts"] = ts if profile["first_ts"] is None else min(profile["first_ts"], ts)
+            profile["last_ts"] = ts if profile["last_ts"] is None else max(profile["last_ts"], ts)
+
+            users_this_session.add(key)
+
+        session_users.append(users_this_session)
+        prior_sets = session_users[-effective_lookback - 1 : -1]
+        returning = set(users_this_session)
+        if len(prior_sets) >= effective_lookback:
+            for s in prior_sets[-effective_lookback:]:
+                returning &= s
+        else:
+            returning = set()
+
+        new_users = users_this_session - seen_users
+        seen_users |= users_this_session
+
+        session_rows.append(
+            {
+                "label": start_dt.strftime("%m/%d %H:%M") + " - " + end_dt.strftime("%m/%d %H:%M"),
+                "start_ts": int(start_dt.timestamp()),
+                "end_ts": int(end_dt.timestamp()),
+                "active_count": len(users_this_session),
+                "returning_count": len(returning),
+                "new_count": len(new_users),
+            }
+        )
+
+    users_out = []
+    for key, data in user_stats.items():
+        if not data["sessions"]:
+            continue
+        msg_count = data["message_count"]
+        total_len = data["total_length"]
+        users_out.append(
+            {
+                "uid": data["uid"],
+                "uname": data["uname"] or key,
+                "session_count": len(data["sessions"]),
+                "message_count": msg_count,
+                "avg_length": round(total_len / msg_count, 1) if msg_count else 0,
+                "sent_gift": data["sent_gift"],
+                "first_ts": data["first_ts"],
+                "last_ts": data["last_ts"],
+            }
+        )
+
+    users_out.sort(key=lambda r: (-r["message_count"], -r["session_count"], -(r["last_ts"] or 0)))
+    session_rows.reverse()
+
+    return {
+        "lookback": effective_lookback,
+        "session_count": session_count,
+        "session_hours": 24,
+        "anchor_end_ts": int(aligned_end.timestamp()),
+        "sessions": session_rows,
+        "users": users_out,
+    }
 
 
 @router.get("/api/room_gift_list")
