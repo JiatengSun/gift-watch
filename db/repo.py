@@ -230,7 +230,13 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             settings.room_id,
         ]
 
+        blind_box_base = settings.blind_box_base_gift.strip()
+
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+
+        if blind_box_base:
+            clauses.append("gift_name != ?")
+            params.append(blind_box_base)
 
         where = ""
         if clauses:

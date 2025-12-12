@@ -56,6 +56,7 @@ copy .env.example .env
 - `BLIND_BOX_REWARDS`：盲盒可能开出的礼物名列表，默认包含电影票/棉花糖/爱心抱枕等。
 - `BLIND_BOX_TEMPLATE`：弹幕回复模板，支持 {uname} / {base_cost_yuan} / {reward_value_yuan} / {profit_yuan} 等占位符。
 - `BLIND_BOX_SEND_DANMAKU`：是否发送盈亏弹幕（默认 1，可关闭仅记录日志）。
+- 盲盒的基础礼物仅用于计算盈亏，不会计入总流水汇总，开出的礼物仍计入流水。
 
 感谢触发条件：同一用户（按 B 站 uid）在同一天送出的目标礼物累计数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。
 当名字和 ID 同时配置时，两组规则会各自检查，满足任意一项即触发感谢（不会要求二者同时命中）。每天每位用户满足条件后只会感谢一次（受 `THANK_PER_USER_DAILY` 影响）。
