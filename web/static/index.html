@@ -179,6 +179,7 @@
       border-radius: 10px 10px 6px 6px;
       position: relative;
       transition: opacity 120ms ease, transform 120ms ease;
+      min-height: 8px;
     }
 
     .bar:hover { opacity: 0.9; transform: translateY(-2px); }
@@ -204,6 +205,29 @@
     }
 
     .bar-wrapper { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 36px; }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pager button {
+      background: rgba(148, 163, 184, 0.12);
+      color: #e2e8f0;
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .pager button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
 
     .badge {
       display: inline-flex;
@@ -791,6 +815,7 @@
 <script>
 const TARGET_TIMEZONE = "Asia/Shanghai";
 const LATEST_PAGE_SIZE = 50;
+const OPS_PAGE_SIZE = 10;
 
 const getTargetDateInfo = (date = new Date()) => {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -913,6 +938,46 @@ const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
   container.innerHTML = `<div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
 };
 
+const renderPaginatedTable = (container, rows, columns, emptyText, pageState) => {
+  if (!container) return;
+  if (!rows.length) {
+    container.innerHTML = `<div class="empty">${emptyText}</div>`;
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / OPS_PAGE_SIZE));
+  const page = Math.min(Math.max(pageState.page || 1, 1), totalPages);
+  pageState.page = page;
+  const start = (page - 1) * OPS_PAGE_SIZE;
+  const visible = rows.slice(start, start + OPS_PAGE_SIZE);
+
+  const header = columns.map((c) => `<th>${c.label}</th>`).join("");
+  const body = visible
+    .map((row) =>
+      `<tr>${columns
+        .map((c) => `<td class="${c.className || ''}">${c.render ? c.render(row[c.key], row) : row[c.key]}</td>`)
+        .join("")}</tr>`
+    )
+    .join("");
+
+  container.innerHTML = `
+    <div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="pager">
+      <button data-page="prev" ${page <= 1 ? "disabled" : ""}>上一页</button>
+      <span class="muted">第 ${page} / ${totalPages} 页</span>
+      <button data-page="next" ${page >= totalPages ? "disabled" : ""}>下一页</button>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.page === "prev" && pageState.page > 1) pageState.page -= 1;
+      if (btn.dataset.page === "next" && pageState.page < totalPages) pageState.page += 1;
+      renderPaginatedTable(container, rows, columns, emptyText, pageState);
+    });
+  });
+};
+
 const groupByGift = (records) => {
   const map = new Map();
   records.forEach((r) => {
@@ -1010,6 +1075,8 @@ const viewState = Object.fromEntries(
 let opsUsersCache = [];
 let opsLeaderboardSortKey = "total_price";
 let opsTimelineRange = "today";
+const opsUsersPagination = { page: 1 };
+const opsSessionsPagination = { page: 1 };
 
 const renderSearch = (records, targets) => {
   const summary = document.getElementById(targets.summary);
@@ -1201,7 +1268,7 @@ const setNowTime = (id) => {
 
 const renderEngagementSessions = (sessions, lookback) => {
   const container = document.getElementById("opsEngagementSessions");
-  renderTable(
+  renderPaginatedTable(
     container,
     sessions,
     [
@@ -1219,7 +1286,8 @@ const renderEngagementSessions = (sessions, lookback) => {
       },
       { key: "new_count", label: "新人（本场首发）", className: "number" },
     ],
-    "暂无场次数据"
+    "暂无场次数据",
+    opsSessionsPagination
   );
 };
 
@@ -1238,7 +1306,7 @@ const renderEngagementUsers = (users, sortKey = "total_price") => {
   const sorter = sorters[sortKey] || sorters.total_price;
   sorted.sort(sorter);
 
-  renderTable(
+  renderPaginatedTable(
     container,
     sorted,
     [
@@ -1248,7 +1316,8 @@ const renderEngagementUsers = (users, sortKey = "total_price") => {
       { key: "session_count", label: "参与场次", className: "number", render: (v) => fmtNumber(v) },
       { key: "last_ts", label: "上次出现", render: (v) => fmtTime(v) },
     ],
-    "暂无观众画像"
+    "暂无观众画像",
+    opsUsersPagination
   );
 };
 
@@ -1257,7 +1326,27 @@ const renderOpsTimeline = (payload) => {
   const meta = document.getElementById("opsTimelineMeta");
   if (!container) return;
 
-  const points = payload?.points || [];
+  const rawPoints = payload?.points || [];
+  const compressPoints = (pts) => {
+    const maxBars = payload?.range === "today" ? 24 : 48;
+    if (pts.length <= maxBars) return pts;
+    const size = Math.max(1, Math.ceil(pts.length / maxBars));
+    const out = [];
+    for (let i = 0; i < pts.length; i += size) {
+      const chunk = pts.slice(i, i + size);
+      const ts = chunk[0].ts;
+      let value = 0;
+      if (payload?.metric === "ONLINE_RANK_COUNT") {
+        value = Math.round(chunk.reduce((acc, c) => acc + (c.value || 0), 0) / chunk.length);
+      } else {
+        value = chunk[chunk.length - 1].value || 0;
+      }
+      out.push({ ts, value });
+    }
+    return out;
+  };
+
+  const points = compressPoints(rawPoints);
   if (meta) {
     meta.textContent = points.length
       ? `${payload.metric_label || ""} · 从 ${fmtTime(payload.start_ts)} 到 ${fmtTime(payload.end_ts)}`
@@ -1271,6 +1360,7 @@ const renderOpsTimeline = (payload) => {
 
   const maxValue = Math.max(...points.map((p) => p.value || 0), 1);
   container.innerHTML = "";
+  container.style.overflowX = payload?.range === "today" ? "hidden" : "auto";
 
   const labelFor = (ts) => {
     const d = new Date(ts * 1000);
@@ -1283,10 +1373,14 @@ const renderOpsTimeline = (payload) => {
   points.forEach((p) => {
     const wrapper = document.createElement("div");
     wrapper.className = "bar-wrapper";
+    if (payload?.range === "today") {
+      wrapper.style.minWidth = "18px";
+    }
     const bar = document.createElement("div");
     bar.className = "bar";
     bar.dataset.value = fmtNumber(p.value || 0);
-    bar.style.height = `${Math.max(2, Math.round(((p.value || 0) / maxValue) * 100))}%`;
+    const percent = Math.round(((p.value || 0) / maxValue) * 100);
+    bar.style.height = `calc(${Math.max(2, percent)}% + 4px)`;
     const label = document.createElement("div");
     label.className = "bar-label";
     label.textContent = labelFor(p.ts);
@@ -1344,6 +1438,8 @@ async function loadEngagementPanel() {
         data.anchor_end_ts
       )}。`;
     }
+    opsUsersPagination.page = 1;
+    opsSessionsPagination.page = 1;
     opsUsersCache = data.users || [];
     renderEngagementSessions(data.sessions || [], data.lookback);
     renderEngagementUsers(opsUsersCache, opsLeaderboardSortKey);
@@ -1802,6 +1898,7 @@ const initView = (viewKey) => {
     document.getElementById("btnLoadEngagement")?.addEventListener("click", loadEngagementPanel);
     document.getElementById("opsLeaderboardSort")?.addEventListener("change", (e) => {
       opsLeaderboardSortKey = e.target.value || "total_price";
+      opsUsersPagination.page = 1;
       renderEngagementUsers(opsUsersCache, opsLeaderboardSortKey);
     });
     document.querySelectorAll("[data-ops-range]").forEach((btn) => {
