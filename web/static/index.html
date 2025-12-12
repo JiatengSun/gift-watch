@@ -1362,6 +1362,9 @@ const renderOpsTimeline = (payload) => {
   container.innerHTML = "";
   container.style.overflowX = payload?.range === "today" ? "hidden" : "auto";
 
+  const chartHeight = Math.max(container.clientHeight || container.offsetHeight || 0, 220);
+  const barArea = Math.max(chartHeight - 60, 120); // leave room for labels/values
+
   const labelFor = (ts) => {
     const d = new Date(ts * 1000);
     if (payload.range === "today") {
@@ -1379,8 +1382,9 @@ const renderOpsTimeline = (payload) => {
     const bar = document.createElement("div");
     bar.className = "bar";
     bar.dataset.value = fmtNumber(p.value || 0);
-    const percent = Math.round(((p.value || 0) / maxValue) * 100);
-    bar.style.height = `calc(${Math.max(2, percent)}% + 4px)`;
+    const ratio = (p.value || 0) / maxValue;
+    const pixelHeight = Math.max(8, Math.round(ratio * barArea));
+    bar.style.height = `${pixelHeight}px`;
     const label = document.createElement("div");
     label.className = "bar-label";
     label.textContent = labelFor(p.ts);
