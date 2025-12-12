@@ -593,7 +593,15 @@
             <h4>定时弹幕</h4>
             <div class="field inline">
               <label class="inline">开启定时弹幕<input type="checkbox" id="announceEnabledToggle" /></label>
-              <label class="inline">间隔（秒）<input id="announceIntervalInput" type="number" min="30" value="300" style="max-width:120px;" /></label>
+              <label class="inline" id="announceIntervalField">间隔（秒）<input id="announceIntervalInput" type="number" min="30" value="300" style="max-width:120px;" /></label>
+              <label class="inline" id="announceThresholdField" style="display:none;">触发阈值（条）<input id="announceThresholdInput" type="number" min="1" value="5" style="max-width:120px;" /></label>
+            </div>
+            <div class="field">
+              <div class="inline radios">
+                <label class="inline">按时间<input type="radio" name="announceMode" value="interval" id="announceModeInterval" checked /></label>
+                <label class="inline">按弹幕数<input type="radio" name="announceMode" value="message_count" id="announceModeCount" /></label>
+              </div>
+              <p class="hint" style="margin:4px 0 0;">按弹幕数时，会在其他人发送的弹幕累计达到阈值后发送一条定时弹幕。</p>
             </div>
             <div class="field">
               <div class="inline radios">
@@ -1092,10 +1100,17 @@ const updateConsoleSummary = (records) => {
   };
 
   const updateAnnounceModeVisibility = (mode) => {
-    const countFields = document.getElementById("announceCountFields");
+    const intervalField = document.getElementById("announceIntervalField");
+    const thresholdField = document.getElementById("announceThresholdField");
     const intervalInput = document.getElementById("announceIntervalInput");
-    if (countFields) countFields.style.display = mode === "message_count" ? "flex" : "none";
-    if (intervalInput) intervalInput.disabled = mode === "message_count";
+    const thresholdInput = document.getElementById("announceThresholdInput");
+
+    const isCountMode = mode === "message_count";
+
+    if (intervalField) intervalField.style.display = isCountMode ? "none" : "inline-flex";
+    if (thresholdField) thresholdField.style.display = isCountMode ? "inline-flex" : "none";
+    if (intervalInput) intervalInput.disabled = isCountMode;
+    if (thresholdInput) thresholdInput.disabled = !isCountMode;
   };
 
 const parseAnnouncements = (value) =>
