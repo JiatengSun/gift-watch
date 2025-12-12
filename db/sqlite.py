@@ -90,6 +90,9 @@ def _migrate_gifts_room_id(conn: sqlite3.Connection) -> None:
 def _ensure_gifts_room_id(conn: sqlite3.Connection) -> None:
     """Guarantee the gifts table has a room_id column by rebuilding if needed."""
 
+    if not _table_exists(conn, "gifts"):
+        return
+
     if "room_id" in _column_names(conn, "gifts"):
         return
 
@@ -147,20 +150,21 @@ def init_db(settings: Settings) -> None:
     schema_path = Path(__file__).with_name("schema.sql")
     schema_sql = schema_path.read_text(encoding="utf-8")
     with get_conn(settings) as conn:
+        # Migrate legacy gifts tables before applying the schema. Commit early so
+        # a later schema failure doesn't roll back the column migration.
         _migrate_gifts_room_id(conn)
         _ensure_gifts_room_id(conn)
         conn.commit()
 
         try:
             conn.executescript(schema_sql)
-            conn.commit()
         except sqlite3.OperationalError as exc:
-            message = str(exc).lower()
-            if "room_id" not in message or "gifts" not in message:
+            if "room_id" not in str(exc):
                 raise
 
-            conn.rollback()
+            # If applying the schema failed because the gifts table still lacks
+            # room_id (e.g., the prior migration was rolled back by the failed
+            # script), rebuild it and retry once.
             _ensure_gifts_room_id(conn)
             conn.commit()
             conn.executescript(schema_sql)
-            conn.commit()
