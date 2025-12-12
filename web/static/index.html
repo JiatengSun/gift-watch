@@ -196,6 +196,16 @@
       stroke-width: 3;
     }
 
+    .line-chart-value {
+      fill: #e2e8f0;
+      font-size: 11px;
+      text-anchor: middle;
+      paint-order: stroke;
+      stroke: rgba(11, 18, 32, 0.65);
+      stroke-width: 2px;
+      stroke-linejoin: round;
+    }
+
     .line-chart-area {
       fill: url(#opsAreaFill);
       stroke: none;
@@ -516,11 +526,11 @@
         <div class="flow-value" id="totalFlowValue">¥-</div>
       </div>
       <div class="view-toggle" aria-label="界面切换">
-        <button class="toggle-btn active" data-view-target="desktop">桌面版</button>
-        <button class="toggle-btn" data-view-target="mobile">手机专用</button>
-        <button class="toggle-btn" data-view-target="tablet">平板专用</button>
-        <button class="toggle-btn" data-view-target="ops">运营数据</button>
-        <button class="toggle-btn" data-view-target="console">控制台</button>
+        <button class="toggle-btn active" data-view-target="desktop">电脑</button>
+        <button class="toggle-btn" data-view-target="mobile">手机</button>
+        <button class="toggle-btn" data-view-target="tablet">平板</button>
+        <button class="toggle-btn" data-view-target="ops">运营</button>
+        <button class="toggle-btn" data-view-target="console">控制</button>
       </div>
     </div>
 
@@ -1507,6 +1517,14 @@ const renderOpsTimeline = (payload) => {
     title.textContent = `${labelFor(p.ts)}: ${fmtNumber(p.value || 0)}`;
     circle.appendChild(title);
     pointsGroup.appendChild(circle);
+
+    const text = document.createElementNS(svg.namespaceURI, "text");
+    const textY = Math.max(padding.top + 12, cy - 10);
+    text.setAttribute("x", cx);
+    text.setAttribute("y", textY);
+    text.setAttribute("class", "line-chart-value");
+    text.textContent = fmtNumber(p.value || 0);
+    pointsGroup.appendChild(text);
   });
   svg.appendChild(pointsGroup);
 
