@@ -471,6 +471,18 @@ def ops_timeline(
     rows = query_user_events(settings, int(start_dt.timestamp()), int(default_end.timestamp()))
     start_ts = int(start_dt.timestamp())
     end_ts_val = int(default_end.timestamp())
+
+    if range_key == "today":
+        ts_values = [int(ts) for *_rest, ts in rows if ts is not None]
+        if ts_values:
+            earliest = min(ts_values)
+            latest = max(ts_values)
+            start_ts = max(start_ts, (earliest // bucket_seconds) * bucket_seconds)
+            end_ts_val = min(
+                end_ts_val,
+                max(start_ts + bucket_seconds, ((latest // bucket_seconds) + 1) * bucket_seconds),
+            )
+
     total_buckets = max(1, int((end_ts_val - start_ts) / bucket_seconds) + 1)
 
     bucket_users: list[set[str]] = [set() for _ in range(total_buckets)]
