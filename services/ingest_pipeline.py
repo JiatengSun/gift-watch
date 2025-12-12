@@ -160,6 +160,11 @@ class IngestPipeline:
                 self.logger.debug("检测到礼物字段但解析失败 cmd=%s event=%s", cmd, event)
             return
 
+        blind_box_base = self.settings.blind_box_base_gift.strip()
+        if blind_box_base and gift.gift_name.strip() == blind_box_base:
+            self.logger.debug("跳过盲盒基础礼物入库 gift=%s", gift.gift_name)
+            return
+
         insert_gift(self.settings, gift)
 
         self.logger.info(

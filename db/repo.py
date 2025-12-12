@@ -280,7 +280,9 @@ def query_blind_box_totals(
     start_ts: int | None = None,
     end_ts: int | None = None,
 ) -> tuple[int, int]:
-    def _sum_for_gifts(conn, gift_names: list[str]) -> int:
+    reward_unit_price = 15_000  # 15 元，按照 total_price 的千分单位
+
+    def _count_reward(conn, gift_names: list[str]) -> int:
         if not gift_names:
             return 0
 
@@ -299,13 +301,14 @@ def query_blind_box_totals(
         placeholders = ",".join(["?"] * len(gift_names))
         where = " AND ".join(clauses + [f"gift_name IN ({placeholders})"])
         cur = conn.execute(
-            f"SELECT COALESCE(SUM(total_price), 0) FROM gifts WHERE {where}", (*params, *gift_names)
+            f"SELECT COALESCE(SUM(num), 0) FROM gifts WHERE {where}", (*params, *gift_names)
         )
         row = cur.fetchone()
         return int(row[0] or 0) if row else 0
 
     with get_conn(settings) as conn:
-        base_total = _sum_for_gifts(conn, [base_gift] if base_gift else [])
-        reward_total = _sum_for_gifts(conn, reward_gifts)
+        reward_count = _count_reward(conn, reward_gifts)
 
-    return base_total, reward_total
+    reward_total = reward_count * reward_unit_price
+
+    return 0, reward_total
