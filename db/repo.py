@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
+import logging
 
 from config.settings import Settings
 from core.gift_parser import GiftEvent, GUARD_LEVEL_NAMES
 from db.sqlite import get_conn
+
+logger = logging.getLogger(__name__)
 
 
 def insert_gift(settings: Settings, gift: GiftEvent) -> None:
@@ -230,7 +233,13 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             settings.room_id,
         ]
 
+        blind_box_base = settings.blind_box_base_gift.strip()
+
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+
+        if blind_box_base:
+            clauses.append("gift_name != ?")
+            params.append(blind_box_base)
 
         where = ""
         if clauses:
@@ -262,3 +271,95 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             "governor": int(row[5] or 0),
         },
     }
+
+
+def query_blind_box_totals(
+    settings: Settings,
+    *,
+    uid: int | None,
+    uname: str | None,
+    base_gift: str,
+    reward_gifts: list[str],
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> tuple[int, int]:
+    def _aggregate(conn, gift_names: list[str]) -> tuple[int, int]:
+        clauses = ["room_id = ?"]
+        params: list[object] = [settings.room_id]
+
+        if uid:
+            clauses.append("uid = ?")
+            params.append(uid)
+        elif uname:
+            clauses.append("uname = ?")
+            params.append(uname)
+
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+
+        if gift_names:
+            placeholders = ",".join(["?"] * len(gift_names))
+            clauses.append(f"gift_name IN ({placeholders})")
+            params.extend(gift_names)
+        elif base_gift.strip():
+            clauses.append("gift_name != ?")
+            params.append(base_gift.strip())
+
+        where = " AND ".join(clauses)
+        cur = conn.execute(
+            f"""
+            SELECT
+              gift_id,
+              gift_name,
+              COALESCE(SUM(num), 0) as total_num,
+              COALESCE(SUM(total_price), 0) as total_price
+            FROM gifts
+            WHERE {where}
+            GROUP BY gift_id, gift_name
+            """,
+            params,
+        )
+        rows = cur.fetchall() or []
+
+        reward_total = 0
+        total_reward_count = 0
+        price_details = []
+        for gift_id, gift_name, num_total, stored_total in rows:
+            num_total_int = int(num_total or 0)
+            total_reward_count += num_total_int
+
+            unit_price = None
+            if gift_id and gift_id in settings.gift_price_by_id:
+                unit_price = settings.gift_price_by_id[gift_id]
+            elif gift_name and gift_name in settings.gift_price_by_name:
+                unit_price = settings.gift_price_by_name[gift_name]
+
+            if unit_price is not None:
+                calculated_total = unit_price * max(num_total_int, 1)
+            else:
+                calculated_total = int(stored_total or 0)
+
+            reward_total += calculated_total
+
+            if logger.isEnabledFor(logging.DEBUG):
+                price_details.append(
+                    {
+                        "gift_id": gift_id,
+                        "gift_name": gift_name,
+                        "num": num_total_int,
+                        "unit_price": unit_price,
+                        "stored_total": int(stored_total or 0),
+                        "calculated_total": calculated_total,
+                    }
+                )
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("盲盒收益礼物明细: %s", price_details)
+
+        return reward_total, total_reward_count
+
+    with get_conn(settings) as conn:
+        reward_total, reward_count = _aggregate(conn, reward_gifts)
+
+    base_total = reward_count * 15000
+
+    return base_total, reward_total

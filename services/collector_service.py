@@ -123,6 +123,9 @@ class CollectorService:
         for event_name in ("SEND_GIFT", "COMBO_SEND", "GUARD_BUY"):
             bound = self._bind(event_name, handler) or bound
 
+        # 盲盒盈亏查询等功能需要监听弹幕
+        self._bind("DANMU_MSG", handler)
+
         if bound:
             return
 
