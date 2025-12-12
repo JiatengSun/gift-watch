@@ -123,14 +123,18 @@ class IngestPipeline:
         cmd = event.get("cmd") or event.get("command") or event.get("type")
         if cmd and "cmd" not in event:
             event["cmd"] = cmd
-        if cmd == "DANMU_MSG":
-            await self._handle_blind_box_query(event)
-            return
 
         coerced_data = self._coerce_event_data(event)
         if coerced_data is not None and coerced_data is not event.get("data"):
             event = dict(event)
             event["data"] = coerced_data
+            # 可能在 data 中携带更准确的命令
+            if not cmd:
+                cmd = event.get("cmd") or event.get("command") or event.get("type")
+
+        if self._is_danmaku_event(event, cmd):
+            await self._handle_blind_box_query(event)
+            return
 
         gift_like = self._is_gift_like_event(event)
         if cmd and cmd not in SUPPORTED_GIFT_CMDS and not gift_like:
@@ -267,6 +271,19 @@ class IngestPipeline:
             for item in raw:
                 if isinstance(item, dict):
                     return item
+
+    def _is_danmaku_event(self, event: dict[str, Any], cmd: str | None) -> bool:
+        if isinstance(cmd, str) and cmd.startswith("DANMU_MSG"):
+            return True
+
+        data = event.get("data") if isinstance(event, dict) else None
+        info = None
+        if isinstance(data, dict):
+            info = data.get("info")
+        if info is None:
+            info = event.get("info") if isinstance(event, dict) else None
+
+        return isinstance(info, (list, tuple)) and len(info) >= 2
 
         if hasattr(raw, "__dict__"):
             coerced = dict(vars(raw))
