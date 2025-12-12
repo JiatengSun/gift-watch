@@ -28,6 +28,7 @@ class AnnouncementService:
         self._danmaku_count: int = 0
         self._send_lock = asyncio.Lock()
         self._self_uid = getattr(getattr(sender, "credential", None), "dedeuserid", None)
+        self._last_log_state: tuple[Any, ...] | None = None
 
     async def _is_live(self, settings: Settings) -> bool:
         if not settings.announce_skip_offline:
@@ -167,23 +168,40 @@ class AnnouncementService:
                 self._last_messages = list(messages)
 
             if not settings.announce_enabled or not messages:
-                self.logger.debug("定时弹幕未启用或内容为空，等待配置更新后再检查")
+                signature = ("disabled", settings.announce_enabled, bool(messages))
+                if signature != self._last_log_state:
+                    self.logger.debug("定时弹幕未启用或内容为空，等待配置更新后再检查")
+                    self._last_log_state = signature
                 await self._stop_danmaku_listener()
                 await asyncio.sleep(interval)
                 continue
 
             if settings.announce_mode == "message_count":
                 await self._ensure_danmaku_listener(settings)
-                self.logger.debug(
-                    "定时弹幕检查: 弹幕触发模式，阈值 %s 条，开播时发送=%s",
+                signature = (
+                    "message_count",
                     max(settings.announce_danmaku_threshold, 1),
                     settings.announce_skip_offline,
                 )
+                if signature != self._last_log_state:
+                    self.logger.debug(
+                        "定时弹幕检查: 弹幕触发模式，阈值 %s 条，开播时发送=%s",
+                        signature[1],
+                        signature[2],
+                    )
+                    self._last_log_state = signature
                 await asyncio.sleep(5)
                 continue
 
             await self._stop_danmaku_listener()
-            self.logger.debug("定时弹幕检查: 间隔 %ss，开播时发送=%s", interval, settings.announce_skip_offline)
+            signature = ("interval", interval, settings.announce_skip_offline)
+            if signature != self._last_log_state:
+                self.logger.debug(
+                    "定时弹幕检查: 间隔 %ss，开播时发送=%s",
+                    interval,
+                    settings.announce_skip_offline,
+                )
+                self._last_log_state = signature
 
             await self._send_next_message(settings)
             await asyncio.sleep(interval)
