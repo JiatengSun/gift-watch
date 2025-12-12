@@ -46,6 +46,12 @@ class SettingsPayload(BaseModel):
     announce_skip_offline: bool = Field(True, description="未开播时是否跳过")
     announce_mode: str = Field("interval", description="定时弹幕模式 interval/message_count")
     announce_danmaku_threshold: int = Field(5, ge=1, description="弹幕触发模式下的计数阈值")
+    blind_box_enabled: bool = Field(True, description="盲盒盈亏查询是否启用")
+    blind_box_triggers: list[str] = Field(default_factory=list, description="触发短句")
+    blind_box_base_gift: str = Field("心动盲盒", description="盲盒基础礼物名")
+    blind_box_rewards: list[str] = Field(default_factory=list, description="盲盒可能开出的礼物")
+    blind_box_template: str = Field("", description="盲盒盈亏回复模板")
+    blind_box_send_danmaku: bool = Field(True, description="是否发送盲盒盈亏弹幕")
 
     @field_validator("thank_mode")
     @classmethod
@@ -80,6 +86,12 @@ def _serialize_settings(settings: Settings) -> dict:
         "announce_skip_offline": settings.announce_skip_offline,
         "announce_mode": settings.announce_mode,
         "announce_danmaku_threshold": settings.announce_danmaku_threshold,
+        "blind_box_enabled": settings.blind_box_enabled,
+        "blind_box_triggers": settings.blind_box_triggers,
+        "blind_box_base_gift": settings.blind_box_base_gift,
+        "blind_box_rewards": settings.blind_box_rewards,
+        "blind_box_template": settings.blind_box_template,
+        "blind_box_send_danmaku": settings.blind_box_send_danmaku,
     }
 
 
@@ -103,6 +115,12 @@ def _env_payload_from_settings(payload: SettingsPayload) -> dict[str, str]:
         "ANNOUNCE_SKIP_OFFLINE": "1" if payload.announce_skip_offline else "0",
         "ANNOUNCE_MODE": payload.announce_mode,
         "ANNOUNCE_DANMAKU_THRESHOLD": str(max(payload.announce_danmaku_threshold, 1)),
+        "BLIND_BOX_ENABLED": "1" if payload.blind_box_enabled else "0",
+        "BLIND_BOX_TRIGGERS": ",".join(payload.blind_box_triggers),
+        "BLIND_BOX_BASE_GIFT": payload.blind_box_base_gift,
+        "BLIND_BOX_REWARDS": ",".join(payload.blind_box_rewards),
+        "BLIND_BOX_TEMPLATE": payload.blind_box_template,
+        "BLIND_BOX_SEND_DANMAKU": "1" if payload.blind_box_send_danmaku else "0",
     }
 
 
