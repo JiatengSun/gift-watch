@@ -161,7 +161,9 @@ def get_settings(env_file: str | None = None) -> Settings:
     announce_danmaku_threshold = max(int(_get_env("ANNOUNCE_DANMAKU_THRESHOLD", "5", env)), 1)
 
     blind_box_enabled = _get_env("BLIND_BOX_ENABLED", "1", env) == "1"
-    blind_box_triggers = _split_phrases(_get_env("BLIND_BOX_TRIGGERS", "查询盲盒", env))
+    blind_box_triggers = _split_phrases(
+        _get_env("BLIND_BOX_TRIGGERS", "查询盲盒,查询心动盲盒盈亏", env)
+    )
     blind_box_base_gift = _get_env("BLIND_BOX_BASE_GIFT", "心动盲盒", env).strip() or "心动盲盒"
     blind_box_rewards = _split_phrases(
         _get_env(

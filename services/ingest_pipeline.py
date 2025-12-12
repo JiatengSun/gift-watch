@@ -302,7 +302,8 @@ class IngestPipeline:
         triggers = [t.strip().lower() for t in self.settings.blind_box_triggers if t.strip()]
         if not triggers:
             return False
-        return content.strip().lower() in triggers
+        content_lower = content.strip().lower()
+        return any(t and t in content_lower for t in triggers)
 
     def _format_currency(self, coins: int) -> str:
         return f"{coins / 1000:.2f}"

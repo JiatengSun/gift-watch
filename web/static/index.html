@@ -624,10 +624,10 @@
               <label class="inline">回复到弹幕<input type="checkbox" id="blindBoxSendToggle" checked /></label>
             </div>
             <div class="field">
-              <label>触发短句（逗号或换行分隔）<input id="blindBoxTriggersInput" placeholder="例如：查询盲盒, 查盲盒" /></label>
+              <label>触发短句（逗号或换行分隔）<input id="blindBoxTriggersInput" placeholder="例如：查询心动盲盒盈亏, 查询盲盒" /></label>
             </div>
+            <input type="hidden" id="blindBoxBaseGiftInput" />
             <div class="field inline">
-              <label class="inline">基础礼物名<input id="blindBoxBaseGiftInput" placeholder="心动盲盒" /></label>
               <label class="inline">开出礼物名（逗号分隔）<input id="blindBoxRewardsInput" placeholder="电影票,棉花糖,..." /></label>
             </div>
             <div class="field">
@@ -636,7 +636,7 @@
               </label>
               <p class="hint">占位符：{uname} / {uid} / {base_cost} / {reward_value} / {profit} / {base_cost_yuan} / {reward_value_yuan} / {profit_yuan} / {profit_sign} / {base_gift}</p>
             </div>
-            <p class="hint">收到触发短句后会查询该用户的盲盒记录，基础礼物不会入库，开出的礼物会入库并按每个 ¥15 计价后计算盈亏，同时在控制台打印日志。</p>
+            <p class="hint">收到触发短句后会查询该用户的盲盒记录，基础礼物固定为“心动盲盒”且不会入库，开出的礼物会入库并按每个 ¥15 计价后计算盈亏，同时在控制台打印日志。</p>
           </div>
         </div>
 
@@ -1198,7 +1198,7 @@ const applySettingsToForm = (settings) => {
   document.getElementById("blindBoxEnabledToggle").checked = !!settings.blind_box_enabled;
   document.getElementById("blindBoxSendToggle").checked = !!settings.blind_box_send_danmaku;
   document.getElementById("blindBoxTriggersInput").value = (settings.blind_box_triggers || []).join(", ");
-  document.getElementById("blindBoxBaseGiftInput").value = settings.blind_box_base_gift || "";
+  document.getElementById("blindBoxBaseGiftInput").value = settings.blind_box_base_gift || "心动盲盒";
   document.getElementById("blindBoxRewardsInput").value = (settings.blind_box_rewards || []).join(", ");
   document.getElementById("blindBoxTemplateInput").value = settings.blind_box_template || "";
 };
@@ -1258,7 +1258,7 @@ const collectSettingsFromForm = () => {
     announce_danmaku_threshold: Math.max(toInt(document.getElementById("announceThresholdInput").value, 5), 1),
     blind_box_enabled: document.getElementById("blindBoxEnabledToggle").checked,
     blind_box_triggers: parsePhrases(document.getElementById("blindBoxTriggersInput").value),
-    blind_box_base_gift: document.getElementById("blindBoxBaseGiftInput").value,
+    blind_box_base_gift: document.getElementById("blindBoxBaseGiftInput").value || "心动盲盒",
     blind_box_rewards: parsePhrases(document.getElementById("blindBoxRewardsInput").value),
     blind_box_template: normalizeMultiline(document.getElementById("blindBoxTemplateInput").value),
     blind_box_send_danmaku: document.getElementById("blindBoxSendToggle").checked,
