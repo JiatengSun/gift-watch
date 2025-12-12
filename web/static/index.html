@@ -593,7 +593,15 @@
             <h4>定时弹幕</h4>
             <div class="field inline">
               <label class="inline">开启定时弹幕<input type="checkbox" id="announceEnabledToggle" /></label>
-              <label class="inline">间隔（秒）<input id="announceIntervalInput" type="number" min="30" value="300" style="max-width:120px;" /></label>
+              <label class="inline" id="announceIntervalField">间隔（秒）<input id="announceIntervalInput" type="number" min="30" value="300" style="max-width:120px;" /></label>
+              <label class="inline" id="announceThresholdField" style="display:none;">触发阈值（条）<input id="announceThresholdInput" type="number" min="1" value="5" style="max-width:120px;" /></label>
+            </div>
+            <div class="field">
+              <div class="inline radios">
+                <label class="inline">按时间<input type="radio" name="announceMode" value="interval" id="announceModeInterval" checked /></label>
+                <label class="inline">按弹幕数<input type="radio" name="announceMode" value="message_count" id="announceModeCount" /></label>
+              </div>
+              <p class="hint" style="margin:4px 0 0;">按弹幕数时，会在其他人发送的弹幕累计达到阈值后发送一条定时弹幕。</p>
             </div>
             <div class="field">
               <label>定时发送内容
@@ -1074,12 +1082,26 @@ const updateConsoleSummary = (records) => {
   el.textContent = `筛选到 ${fmtNumber(records.length)} 条，数量 ${fmtNumber(totalNum)}，金额 ¥${fmtCurrency(totalPrice)}`;
 };
 
-const updateThankModeVisibility = (mode) => {
-  const countFields = document.getElementById("countModeFields");
-  const valueFields = document.getElementById("valueModeFields");
-  if (countFields) countFields.style.display = mode === "value" ? "none" : "block";
-  if (valueFields) valueFields.style.display = mode === "value" ? "block" : "none";
-};
+  const updateThankModeVisibility = (mode) => {
+    const countFields = document.getElementById("countModeFields");
+    const valueFields = document.getElementById("valueModeFields");
+    if (countFields) countFields.style.display = mode === "value" ? "none" : "block";
+    if (valueFields) valueFields.style.display = mode === "value" ? "block" : "none";
+  };
+
+  const updateAnnounceModeVisibility = (mode) => {
+    const intervalField = document.getElementById("announceIntervalField");
+    const thresholdField = document.getElementById("announceThresholdField");
+    const intervalInput = document.getElementById("announceIntervalInput");
+    const thresholdInput = document.getElementById("announceThresholdInput");
+
+    const isCountMode = mode === "message_count";
+
+    if (intervalField) intervalField.style.display = isCountMode ? "none" : "inline-flex";
+    if (thresholdField) thresholdField.style.display = isCountMode ? "inline-flex" : "none";
+    if (intervalInput) intervalInput.disabled = isCountMode;
+    if (thresholdInput) thresholdInput.disabled = !isCountMode;
+  };
 
 const parseAnnouncements = (value) =>
   (value || "")
@@ -1128,6 +1150,13 @@ const applySettingsToForm = (settings) => {
   if (modeInput) modeInput.checked = true;
   updateThankModeVisibility(mode);
 
+  const announceMode = settings.announce_mode === "message_count" ? "message_count" : "interval";
+  const announceModeInput = document.getElementById(
+    announceMode === "message_count" ? "announceModeCount" : "announceModeInterval",
+  );
+  if (announceModeInput) announceModeInput.checked = true;
+  updateAnnounceModeVisibility(announceMode);
+
   document.getElementById("targetGiftsInput").value = (settings.target_gifts || []).join(", ");
   document.getElementById("targetGiftIdsInput").value = (settings.target_gift_ids || []).join(", ");
   document.getElementById("targetMinNumInput").value = settings.target_min_num ?? 50;
@@ -1140,6 +1169,7 @@ const applySettingsToForm = (settings) => {
 
   document.getElementById("announceEnabledToggle").checked = !!settings.announce_enabled;
   document.getElementById("announceIntervalInput").value = settings.announce_interval_sec ?? 300;
+  document.getElementById("announceThresholdInput").value = settings.announce_danmaku_threshold ?? 5;
   const announceText = settings.announce_message || "";
   document.getElementById("announceMessageInput").value = announceText;
   updateAnnouncePreview(announceText);
@@ -1148,6 +1178,7 @@ const applySettingsToForm = (settings) => {
 
 const collectSettingsFromForm = () => {
   const thankMode = document.querySelector('input[name="thankMode"]:checked')?.value || "count";
+  const announceMode = document.querySelector('input[name="announceMode"]:checked')?.value || "interval";
   const parseCsv = (value) =>
     (value || "")
       .replace(/，/g, ",")
@@ -1189,6 +1220,8 @@ const collectSettingsFromForm = () => {
     announce_interval_sec: Math.max(toInt(document.getElementById("announceIntervalInput").value, 300), 30),
     announce_message: normalizeAnnouncements(document.getElementById("announceMessageInput").value),
     announce_skip_offline: document.getElementById("announceSkipOfflineToggle").checked,
+    announce_mode: announceMode,
+    announce_danmaku_threshold: Math.max(toInt(document.getElementById("announceThresholdInput").value, 5), 1),
   };
 };
 
@@ -1410,6 +1443,8 @@ const initView = (viewKey) => {
     document.getElementById("btnDeleteRecord")?.addEventListener("click", () => deleteRecord());
     document.getElementById("thankModeCount")?.addEventListener("change", () => updateThankModeVisibility("count"));
     document.getElementById("thankModeValue")?.addEventListener("change", () => updateThankModeVisibility("value"));
+    document.getElementById("announceModeInterval")?.addEventListener("change", () => updateAnnounceModeVisibility("interval"));
+    document.getElementById("announceModeCount")?.addEventListener("change", () => updateAnnounceModeVisibility("message_count"));
     document.getElementById("btnReloadSettings")?.addEventListener("click", loadSettings);
     document.getElementById("btnSaveSettings")?.addEventListener("click", saveSettings);
     document.getElementById("announceMessageInput")?.addEventListener("input", (ev) => {
