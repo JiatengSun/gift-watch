@@ -120,7 +120,8 @@ class IngestPipeline:
         if cmd == "DANMU_MSG":
             await self._handle_blind_box_query(event)
             return
-        if cmd and cmd not in SUPPORTED_GIFT_CMDS:
+        gift_like = self._is_gift_like_event(event)
+        if cmd and cmd not in SUPPORTED_GIFT_CMDS and not gift_like:
             if self.logger.isEnabledFor(logging.DEBUG):
                 self.logger.debug("忽略非礼物事件 cmd=%s keys=%s", cmd, list(event.keys()))
             return
@@ -130,10 +131,14 @@ class IngestPipeline:
         if cmd == "GUARD_BUY":
             gift = parse_guard_buy(event, room_id=self.settings.room_id)
         else:
-            gift = parse_send_gift(event, room_id=self.settings.room_id)
+            gift = parse_send_gift(
+                event, room_id=self.settings.room_id, allow_unknown_cmd=gift_like
+            )
         if gift is None:
             if cmd == "SEND_GIFT":
                 self.logger.warning("收到 SEND_GIFT 但无法解析，原始事件: %s", event)
+            elif gift_like:
+                self.logger.debug("检测到礼物字段但解析失败 cmd=%s event=%s", cmd, event)
             return
 
         insert_gift(self.settings, gift)
@@ -220,6 +225,30 @@ class IngestPipeline:
             uname = str(event.get("uname") or event.get("user") or "").strip()
 
         return uid, uname, content
+
+    def _is_gift_like_event(self, event: dict[str, Any]) -> bool:
+        data = event.get("data") or {}
+        if isinstance(data, dict) and isinstance(data.get("data"), dict):
+            data = data.get("data")  # bilibili-api 的部分封装会套一层 data.data
+
+        if not isinstance(data, dict):
+            return False
+
+        gift_obj = data.get("gift") if isinstance(data.get("gift"), dict) else {}
+        gift_name = (
+            data.get("giftName")
+            or data.get("gift_name")
+            or gift_obj.get("giftName")
+            or gift_obj.get("gift_name")
+        )
+        gift_id = (
+            data.get("giftId")
+            or data.get("gift_id")
+            or gift_obj.get("giftId")
+            or gift_obj.get("gift_id")
+        )
+
+        return bool(gift_name or gift_id)
 
     def _is_blind_box_trigger(self, content: str) -> bool:
         triggers = [t.strip().lower() for t in self.settings.blind_box_triggers if t.strip()]
