@@ -79,14 +79,19 @@ def parse_guard_buy(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
     )
 
 
-def parse_send_gift(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
+def parse_send_gift(
+    event: Dict[str, Any], room_id: int, *, allow_unknown_cmd: bool = False
+) -> Optional[GiftEvent]:
     # 兼容不同封装形态
     cmd = event.get("cmd") or event.get("command")
-    if cmd not in SUPPORTED_GIFT_CMDS:
+    if not allow_unknown_cmd and cmd not in SUPPORTED_GIFT_CMDS:
         return None
 
     outer_data = event.get("data") or {}
     inner_data = outer_data.get("data") if isinstance(outer_data, dict) else None
+    if isinstance(inner_data, (list, tuple)) and inner_data and isinstance(inner_data[0], dict):
+        inner_data = inner_data[0]
+
     data = inner_data if isinstance(inner_data, dict) else outer_data
     try:
         uid = int(data.get("uid") or 0)
