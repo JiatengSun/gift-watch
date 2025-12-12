@@ -604,6 +604,16 @@
               <p class="hint" style="margin:4px 0 0;">按弹幕数时，会在其他人发送的弹幕累计达到阈值后发送一条定时弹幕。</p>
             </div>
             <div class="field">
+              <div class="inline radios">
+                <label class="inline">按时间<input type="radio" name="announceMode" value="interval" id="announceModeInterval" checked /></label>
+                <label class="inline">按弹幕数<input type="radio" name="announceMode" value="message_count" id="announceModeCount" /></label>
+              </div>
+              <p class="hint" style="margin:4px 0 0;">按弹幕数时，会在其他人发送的弹幕累计达到阈值后发送一条定时弹幕。</p>
+            </div>
+            <div class="field inline" id="announceCountFields" style="display:none;">
+              <label class="inline">触发阈值（条）<input id="announceThresholdInput" type="number" min="1" value="5" style="max-width:120px;" /></label>
+            </div>
+            <div class="field">
               <label>定时发送内容
                 <textarea id="announceMessageInput" placeholder="每行一条，自动轮播"></textarea>
               </label>
