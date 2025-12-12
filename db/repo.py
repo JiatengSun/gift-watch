@@ -21,6 +21,21 @@ def insert_gift(settings: Settings, gift: GiftEvent) -> None:
         )
 
 
+def query_user_events(settings: Settings, start_ts: int, end_ts: int) -> list[tuple]:
+    """Return raw user events (danmaku / gifts) within a range for analytics."""
+
+    with get_conn(settings) as conn:
+        cur = conn.execute(
+            """
+            SELECT uid, uname, raw_json, gift_id, total_price, ts
+            FROM gifts
+            WHERE room_id = ? AND ts >= ? AND ts < ?
+            """,
+            (settings.room_id, start_ts, end_ts),
+        )
+        return cur.fetchall()
+
+
 def _ts_scale_flags(conn) -> tuple[bool, bool]:
     cur = conn.execute("SELECT MIN(ts), MAX(ts) FROM gifts")
     row = cur.fetchone()
