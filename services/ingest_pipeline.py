@@ -110,6 +110,12 @@ class IngestPipeline:
             data = event.get("data")
             if isinstance(data, (list, tuple)) and data and isinstance(data[0], dict):
                 inner_event = dict(data[0])
+            elif isinstance(data, dict):
+                inner_event = dict(data)
+            else:
+                inner_event = None
+
+            if inner_event is not None:
                 if "cmd" not in inner_event and event.get("name"):
                     inner_event["cmd"] = event["name"]
                 event = inner_event
