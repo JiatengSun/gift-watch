@@ -314,6 +314,9 @@ class IngestPipeline:
         except Exception:
             return template
 
+    def _default_blind_box_template(self) -> str:
+        return "{uname} 心动盲盒投入¥{base_cost_yuan}，产出¥{reward_value_yuan}，盈亏{profit_sign}{profit_abs_yuan}"
+
     def _should_reply_blind_box(self, key: Any, ts: float) -> bool:
         cooldown_sec = 5
         last_ts = self._blind_box_cooldown.get(key)
@@ -359,11 +362,18 @@ class IngestPipeline:
             "base_cost_yuan": self._format_currency(base_total),
             "reward_value_yuan": self._format_currency(reward_total),
             "profit_yuan": self._format_currency(profit),
+            "profit_abs_yuan": self._format_currency(abs(profit)),
             "profit_sign": "+" if profit >= 0 else "-",
             "base_gift": self.settings.blind_box_base_gift,
         }
 
-        message = self._render_template(self.settings.blind_box_template, **context)
+        template = (self.settings.blind_box_template or "").strip()
+        if not template:
+            template = self._default_blind_box_template()
+
+        message = self._render_template(template, **context).strip()
+        if not message:
+            message = self._render_template(self._default_blind_box_template(), **context)
 
         self.logger.info(
             "盲盒查询：uid=%s uname=%s 触发词=%s 投入=%s 产出=%s 盈亏=%s",
