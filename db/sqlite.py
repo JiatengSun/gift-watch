@@ -153,6 +153,7 @@ def init_db(settings: Settings) -> None:
 
         try:
             conn.executescript(schema_sql)
+            conn.commit()
         except sqlite3.OperationalError as exc:
             message = str(exc).lower()
             if "room_id" not in message or "gifts" not in message:
@@ -162,3 +163,4 @@ def init_db(settings: Settings) -> None:
             _ensure_gifts_room_id(conn)
             conn.commit()
             conn.executescript(schema_sql)
+            conn.commit()
