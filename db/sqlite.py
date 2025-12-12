@@ -28,7 +28,54 @@ def _migrate_gifts_room_id(conn: sqlite3.Connection) -> None:
 
     columns = _column_names(conn, "gifts")
     if "room_id" not in columns:
-        conn.execute("ALTER TABLE gifts ADD COLUMN room_id INTEGER NOT NULL DEFAULT 0")
+        try:
+            conn.execute(
+                "ALTER TABLE gifts ADD COLUMN room_id INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS _gifts_migrating (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ts INTEGER NOT NULL,
+                  room_id INTEGER NOT NULL DEFAULT 0,
+                  uid INTEGER,
+                  uname TEXT,
+                  gift_id INTEGER,
+                  gift_name TEXT,
+                  num INTEGER DEFAULT 1,
+                  total_price INTEGER DEFAULT 0,
+                  raw_json TEXT
+                )
+                """
+            )
+
+            existing_cols = [
+                col for col in columns if col in {
+                    "id",
+                    "ts",
+                    "uid",
+                    "uname",
+                    "gift_id",
+                    "gift_name",
+                    "num",
+                    "total_price",
+                    "raw_json",
+                }
+            ]
+            col_list = ", ".join(existing_cols)
+            placeholder_cols = f"{col_list}, 0" if col_list else "0"
+            insert_cols = (
+                f"{col_list}, room_id" if col_list else "room_id"
+            )
+            select_cols = placeholder_cols if col_list else "0"
+
+            conn.execute(
+                f"INSERT INTO _gifts_migrating ({insert_cols}) "
+                f"SELECT {select_cols} FROM gifts"
+            )
+            conn.execute("DROP TABLE gifts")
+            conn.execute("ALTER TABLE _gifts_migrating RENAME TO gifts")
 
 
 def init_db(settings: Settings) -> None:
