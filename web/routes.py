@@ -44,12 +44,20 @@ class SettingsPayload(BaseModel):
     announce_interval_sec: int = Field(300, ge=30, description="定时弹幕间隔秒")
     announce_message: str = Field("", description="定时弹幕内容，多行会轮播发送")
     announce_skip_offline: bool = Field(True, description="未开播时是否跳过")
+    announce_mode: str = Field("interval", description="定时弹幕模式 interval/message_count")
+    announce_danmaku_threshold: int = Field(5, ge=1, description="弹幕触发模式下的计数阈值")
 
     @field_validator("thank_mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
         v = (v or "").lower()
         return v if v in {"count", "value"} else "count"
+
+    @field_validator("announce_mode")
+    @classmethod
+    def validate_announce_mode(cls, v: str) -> str:
+        v = (v or "").lower()
+        return v if v in {"interval", "message_count"} else "interval"
 
 
 def _serialize_settings(settings: Settings) -> dict:
@@ -70,6 +78,8 @@ def _serialize_settings(settings: Settings) -> dict:
         "announce_interval_sec": settings.announce_interval_sec,
         "announce_message": "\n".join(settings.announce_messages),
         "announce_skip_offline": settings.announce_skip_offline,
+        "announce_mode": settings.announce_mode,
+        "announce_danmaku_threshold": settings.announce_danmaku_threshold,
     }
 
 
@@ -91,6 +101,8 @@ def _env_payload_from_settings(payload: SettingsPayload) -> dict[str, str]:
         "ANNOUNCE_INTERVAL_SEC": str(max(payload.announce_interval_sec, 30)),
         "ANNOUNCE_MESSAGE": payload.announce_message,
         "ANNOUNCE_SKIP_OFFLINE": "1" if payload.announce_skip_offline else "0",
+        "ANNOUNCE_MODE": payload.announce_mode,
+        "ANNOUNCE_DANMAKU_THRESHOLD": str(max(payload.announce_danmaku_threshold, 1)),
     }
 
 
