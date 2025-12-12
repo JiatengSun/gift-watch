@@ -591,27 +591,15 @@
 
           <div class="settings-block">
             <h4>定时弹幕</h4>
-            <div class="field inline">
+            <div class="field inline" style="flex-wrap: wrap; gap: 12px;">
               <label class="inline">开启定时弹幕<input type="checkbox" id="announceEnabledToggle" /></label>
+              <div class="inline radios" style="margin-left: 4px;">
+                <label class="inline">按时间<input type="radio" name="announceMode" value="interval" id="announceModeInterval" checked /></label>
+                <label class="inline">按弹幕数<input type="radio" name="announceMode" value="message_count" id="announceModeCount" /></label>
+              </div>
+              <span class="hint" style="margin:0 6px;">按弹幕数时，会在其他人发送的弹幕累计达到阈值后发送一条定时弹幕。</span>
               <label class="inline" id="announceIntervalField">间隔（秒）<input id="announceIntervalInput" type="number" min="30" value="300" style="max-width:120px;" /></label>
               <label class="inline" id="announceThresholdField" style="display:none;">触发阈值（条）<input id="announceThresholdInput" type="number" min="1" value="5" style="max-width:120px;" /></label>
-            </div>
-            <div class="field">
-              <div class="inline radios">
-                <label class="inline">按时间<input type="radio" name="announceMode" value="interval" id="announceModeInterval" checked /></label>
-                <label class="inline">按弹幕数<input type="radio" name="announceMode" value="message_count" id="announceModeCount" /></label>
-              </div>
-              <p class="hint" style="margin:4px 0 0;">按弹幕数时，会在其他人发送的弹幕累计达到阈值后发送一条定时弹幕。</p>
-            </div>
-            <div class="field">
-              <div class="inline radios">
-                <label class="inline">按时间<input type="radio" name="announceMode" value="interval" id="announceModeInterval" checked /></label>
-                <label class="inline">按弹幕数<input type="radio" name="announceMode" value="message_count" id="announceModeCount" /></label>
-              </div>
-              <p class="hint" style="margin:4px 0 0;">按弹幕数时，会在其他人发送的弹幕累计达到阈值后发送一条定时弹幕。</p>
-            </div>
-            <div class="field inline" id="announceCountFields" style="display:none;">
-              <label class="inline">触发阈值（条）<input id="announceThresholdInput" type="number" min="1" value="5" style="max-width:120px;" /></label>
             </div>
             <div class="field">
               <label>定时发送内容
