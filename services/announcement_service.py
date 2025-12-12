@@ -23,6 +23,7 @@ class AnnouncementService:
         self._task: Optional[asyncio.Task] = None
         self._message_index: int = 0
         self._last_messages: list[str] | None = None
+        self._credential = getattr(sender, "credential", None)
         self._danmaku: Optional[live.LiveDanmaku] = None
         self._danmaku_task: Optional[asyncio.Task] = None
         self._danmaku_count: int = 0
@@ -73,9 +74,13 @@ class AnnouncementService:
         self._danmaku_count += 1
         threshold = max(settings.announce_danmaku_threshold, 1)
         if self._danmaku_count < threshold:
+            self.logger.debug(
+                "弹幕触发计数：%s/%s（忽略自己发送的弹幕）", self._danmaku_count, threshold
+            )
             return
 
         self._danmaku_count = 0
+        self.logger.debug("弹幕触发计数达到阈值 %s，准备发送定时弹幕", threshold)
         await self._send_next_message(settings)
 
     def _extract_uid(self, event: dict[str, Any]) -> Optional[int]:
@@ -112,7 +117,7 @@ class AnnouncementService:
             return
 
         self._danmaku_count = 0
-        self._danmaku = live.LiveDanmaku(settings.room_id)
+        self._danmaku = live.LiveDanmaku(settings.room_id, credential=self._credential)
 
         bound = False
         try:
