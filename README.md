@@ -7,6 +7,7 @@
 - 写入本地 SQLite 数据库。
 - 命中指定礼物名时，用 **小号** 自动发送感谢弹幕（需登录态）。
 - 提供简单网页：按用户名/礼物名检索送礼记录。
+- 在弹幕中输入短句（默认“查询盲盒”或“查询心动盲盒盈亏”）可查询心动盲盒投入与开出礼物价值的盈亏，并自动回复弹幕（盲盒基础礼物不入库，开出的礼物按实际金额计算）。
 
 > 该项目基于 `Nemo2011/bilibili-api`（PyPI 包名 `bilibili-api-python`）。
 > B 站接口可能变化，请保持依赖版本更新。
@@ -47,6 +48,15 @@ copy .env.example .env
 - `THANK_PER_USER_DAILY`（默认 1，表示每个用户每天只感谢一次）
 - `THANK_GUARD`（默认 0，设置为 1 时对大航海 GUARD_BUY 发送“感谢xxx的yy！！你最帅了！”弹幕）
 - 小号的 `BOT_SESSDATA / BOT_BILI_JCT / BOT_BUVID3`
+
+盲盒盈亏查询可在控制台配置，也可以按需调整以下环境变量：
+- `BLIND_BOX_ENABLED`：是否开启弹幕查询（默认 1）。
+- `BLIND_BOX_TRIGGERS`：触发短句，逗号或换行分隔，默认包含 `查询盲盒` 与 `查询心动盲盒盈亏`。
+- `BLIND_BOX_BASE_GIFT`：盲盒基础礼物名，默认 `心动盲盒`。
+- `BLIND_BOX_REWARDS`：盲盒可能开出的礼物名列表，默认包含电影票/棉花糖/爱心抱枕等。
+- `BLIND_BOX_TEMPLATE`：弹幕回复模板，支持 {uname} / {base_cost_yuan} / {reward_value_yuan} / {profit_yuan} 等占位符。
+- `BLIND_BOX_SEND_DANMAKU`：是否发送盈亏弹幕（默认 1，可关闭仅记录日志）。
+- 盲盒的基础礼物不会入库也不会计入流水，盲盒开出的礼物会正常入库并计入流水，盈亏统计使用礼物本身金额。
 
 感谢触发条件：同一用户（按 B 站 uid）在同一天送出的目标礼物累计数量达到 `TARGET_MIN_NUM`，并且礼物名匹配 `TARGET_GIFTS` **或** 礼物 ID 匹配 `TARGET_GIFT_IDS`。
 当名字和 ID 同时配置时，两组规则会各自检查，满足任意一项即触发感谢（不会要求二者同时命中）。每天每位用户满足条件后只会感谢一次（受 `THANK_PER_USER_DAILY` 影响）。
