@@ -34,8 +34,10 @@ class DanmakuSender:
         self._queue: DanmakuQueue | None = None
         self._queue_task: asyncio.Task | None = None
         self._queue_lock = asyncio.Lock()
+        self._queue_db_path = queue_db_path
+        self._queue_interval = max(1, queue_interval_sec)
         if queue_db_path:
-            self._queue = DanmakuQueue(queue_db_path, interval_sec=max(1, queue_interval_sec))
+            self._queue = DanmakuQueue(queue_db_path, room_id=self.room_id, interval_sec=self._queue_interval)
             self.logger.info(
                 "使用持久化弹幕队列发送，数据库=%s，间隔=%ss",
                 queue_db_path,
@@ -67,10 +69,12 @@ class DanmakuSender:
             return
 
         if self._queue:
-            await asyncio.to_thread(self._queue.enqueue, trimmed)
+            msg_id = await asyncio.to_thread(self._queue.enqueue, trimmed)
+            self.logger.info("弹幕入队 id=%s content=%s", msg_id, trimmed)
             await self._ensure_queue_worker()
             return
 
+        self.logger.info("直接发送弹幕 content=%s", trimmed)
         await self._send_direct(trimmed)
 
     async def _send_direct(self, message: str) -> None:
@@ -100,19 +104,30 @@ class DanmakuSender:
     async def _queue_loop(self) -> None:
         assert self._queue is not None
         while True:
-            msg: QueueMessage | None = await asyncio.to_thread(self._queue.claim_next)
-            if msg is None:
-                delay = await asyncio.to_thread(self._queue.next_available_delay)
-                await asyncio.sleep(delay if delay is not None else 1.0)
-                continue
-
-            now = time.time()
-            if msg.not_before > now:
-                await asyncio.sleep(msg.not_before - now)
-
             try:
+                msg: QueueMessage | None = await asyncio.to_thread(self._queue.claim_next)
+                if msg is None:
+                    delay = await asyncio.to_thread(self._queue.next_available_delay)
+                    if delay is None:
+                        delay = 1.0
+                    self.logger.debug("队列暂无可发送弹幕，%ss 后重试", round(delay, 2))
+                    await asyncio.sleep(delay)
+                    continue
+
+                now = time.time()
+                if msg.not_before > now:
+                    sleep_for = msg.not_before - now
+                    self.logger.debug(
+                        "等待下一个弹幕窗口 id=%s 延迟=%.2fs", msg.id, sleep_for
+                    )
+                    await asyncio.sleep(sleep_for)
+
+                self.logger.info("发送队列弹幕 id=%s content=%s", msg.id, msg.message)
                 await self._send_direct(msg.message)
             except ResponseCodeException as exc:
+                if self._queue_task and self._queue_task.cancelled():
+                    self.logger.warning("队列任务已取消，停止发送")
+                    return
                 if exc.code == 10030:
                     self.logger.warning("弹幕发送过快，%ss 后重试", self._queue.interval_sec)
                     await asyncio.to_thread(
@@ -123,14 +138,15 @@ class DanmakuSender:
                     await asyncio.sleep(self._queue.interval_sec)
                     continue
                 await asyncio.to_thread(self._queue.mark_failed, msg.id, str(exc))
-                self.logger.exception("弹幕发送失败，已标记为失败")
+                self.logger.exception("弹幕发送失败，已标记为失败 id=%s", msg.id)
                 continue
             except Exception as exc:  # pragma: no cover - 防御性重试
                 await asyncio.to_thread(self._queue.reschedule, msg.id, error=str(exc))
-                self.logger.exception("弹幕发送异常，已重新入队")
+                self.logger.exception("弹幕发送异常，已重新入队 id=%s", msg.id)
                 continue
 
             await asyncio.to_thread(self._queue.mark_sent, msg.id)
+            self.logger.info("弹幕发送成功 id=%s", msg.id)
 
     async def send_thanks(self, uname: str, gift_name: str, num: int = 1) -> None:
         msg = self._render(self._thank_message_single, uname=uname, gift_name=gift_name, num=num)
@@ -164,6 +180,12 @@ class DanmakuSender:
         if room_id is not None and room_id != self.room_id:
             self.room_id = room_id
             self._room = None
+            if self._queue_db_path:
+                self._queue = DanmakuQueue(
+                    self._queue_db_path,
+                    room_id=self.room_id,
+                    interval_sec=self._queue_interval,
+                )
         if credential is not None and credential is not self.credential:
             self.credential = credential
             self._room = None
@@ -176,11 +198,15 @@ class DanmakuSender:
         if max_length is not None:
             self.max_length = max(0, max_length)
         if queue_db_path is not None:
+            self._queue_db_path = queue_db_path
             if queue_db_path:
-                self._queue = DanmakuQueue(queue_db_path, interval_sec=max(1, queue_interval_sec or 3))
+                self._queue_interval = max(1, queue_interval_sec or self._queue_interval or 3)
+                self._queue = DanmakuQueue(queue_db_path, room_id=self.room_id, interval_sec=self._queue_interval)
             else:
                 if self._queue_task:
                     self._queue_task.cancel()
                 self._queue = None
+                self._queue_interval = max(1, queue_interval_sec or self._queue_interval)
         elif queue_interval_sec is not None and self._queue is not None:
-            self._queue.interval_sec = max(1, queue_interval_sec)
+            self._queue_interval = max(1, queue_interval_sec)
+            self._queue.interval_sec = self._queue_interval
