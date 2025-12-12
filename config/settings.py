@@ -82,6 +82,9 @@ class Settings:
     thank_message_guard: str
 
     danmaku_max_length: int
+    danmaku_queue_enabled: bool
+    danmaku_queue_db_path: str
+    danmaku_queue_interval_sec: int
 
     announce_enabled: bool
     announce_interval_sec: int
@@ -158,6 +161,9 @@ def get_settings(env_file: str | None = None) -> Settings:
     )
 
     danmaku_max_length = max(int(_get_env("DANMAKU_MAX_LENGTH", "20", env)), 0)
+    danmaku_queue_enabled = _get_env("DANMAKU_QUEUE_ENABLED", "1", env) == "1"
+    danmaku_queue_db_path = _get_env("DANMAKU_QUEUE_DB_PATH", "", env).strip()
+    danmaku_queue_interval_sec = max(int(_get_env("DANMAKU_QUEUE_INTERVAL_SEC", "3", env)), 1)
 
     announce_enabled = _get_env("ANNOUNCE_ENABLED", "0", env) == "1"
     announce_interval_sec = max(int(_get_env("ANNOUNCE_INTERVAL_SEC", "300", env)), 30)
@@ -239,6 +245,9 @@ def get_settings(env_file: str | None = None) -> Settings:
         thank_message_summary=thank_message_summary,
         thank_message_guard=thank_message_guard,
         danmaku_max_length=danmaku_max_length,
+        danmaku_queue_enabled=danmaku_queue_enabled,
+        danmaku_queue_db_path=danmaku_queue_db_path or _get_env("DB_PATH", "gifts.db", env),
+        danmaku_queue_interval_sec=danmaku_queue_interval_sec,
 
         announce_enabled=announce_enabled,
         announce_interval_sec=announce_interval_sec,

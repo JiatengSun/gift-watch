@@ -66,6 +66,8 @@ class IngestPipeline:
                 thank_message_summary=self.settings.thank_message_summary,
                 thank_message_guard=self.settings.thank_message_guard,
                 max_length=self.settings.danmaku_max_length,
+                queue_db_path=self.settings.danmaku_queue_db_path if self.settings.danmaku_queue_enabled else None,
+                queue_interval_sec=self.settings.danmaku_queue_interval_sec,
             )
             return
 
@@ -76,6 +78,8 @@ class IngestPipeline:
             thank_message_summary=self.settings.thank_message_summary,
             thank_message_guard=self.settings.thank_message_guard,
             max_length=self.settings.danmaku_max_length,
+            queue_db_path=self.settings.danmaku_queue_db_path if self.settings.danmaku_queue_enabled else None,
+            queue_interval_sec=self.settings.danmaku_queue_interval_sec,
         )
 
     def _refresh_settings(self) -> None:
