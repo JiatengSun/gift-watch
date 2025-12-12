@@ -243,29 +243,26 @@ def init_db(settings: Settings) -> None:
         _guarantee_gifts_room_id(conn)
         conn.commit()
 
-        try:
-            conn.executescript(schema_sql)
-        except sqlite3.OperationalError as exc:
-            if "room_id" not in str(exc):
-                raise
-
-            # If applying the schema failed because the gifts table still lacks
-            # room_id (e.g., the prior migration was rolled back by the failed
-            # script), rebuild it and retry once.
-            _debug_log(
-                "schema exec failed with missing room_id; retrying ensure + schema"
-            )
-            _guarantee_gifts_room_id(conn)
-            conn.commit()
+        statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
+        for idx, stmt in enumerate(statements, start=1):
             try:
-                conn.executescript(schema_sql)
-            except sqlite3.OperationalError as exc_retry:
-                if "room_id" not in str(exc_retry):
+                conn.execute(stmt)
+            except sqlite3.OperationalError as exc:
+                if "room_id" not in str(exc):
                     raise
 
                 _debug_log(
-                    "schema retry still missing room_id; forcing full gifts rebuild"
+                    f"schema statement {idx} failed with missing room_id: {stmt}"
                 )
                 _force_recreate_gifts(conn)
                 conn.commit()
-                conn.executescript(schema_sql)
+
+                try:
+                    conn.execute(stmt)
+                except sqlite3.OperationalError as retry_exc:
+                    if "room_id" in str(retry_exc):
+                        _debug_log(
+                            f"retry for statement {idx} still failed; columns -> "
+                            f"{sorted(_column_names(conn, 'gifts'))}"
+                        )
+                    raise
