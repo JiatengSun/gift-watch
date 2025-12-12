@@ -230,7 +230,13 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             settings.room_id,
         ]
 
+        blind_box_base = settings.blind_box_base_gift.strip()
+
         _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+
+        if blind_box_base:
+            clauses.append("gift_name != ?")
+            params.append(blind_box_base)
 
         where = ""
         if clauses:
@@ -262,3 +268,47 @@ def query_flow_summary(settings: Settings, start_ts: int | None = None, end_ts: 
             "governor": int(row[5] or 0),
         },
     }
+
+
+def query_blind_box_totals(
+    settings: Settings,
+    *,
+    uid: int | None,
+    uname: str | None,
+    base_gift: str,
+    reward_gifts: list[str],
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> tuple[int, int]:
+    reward_unit_price = 15_000  # 15 元，按照 total_price 的千分单位
+
+    def _count_reward(conn, gift_names: list[str]) -> int:
+        if not gift_names:
+            return 0
+
+        clauses = ["room_id = ?"]
+        params: list[object] = [settings.room_id]
+
+        if uid:
+            clauses.append("uid = ?")
+            params.append(uid)
+        elif uname:
+            clauses.append("uname = ?")
+            params.append(uname)
+
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+
+        placeholders = ",".join(["?"] * len(gift_names))
+        where = " AND ".join(clauses + [f"gift_name IN ({placeholders})"])
+        cur = conn.execute(
+            f"SELECT COALESCE(SUM(num), 0) FROM gifts WHERE {where}", (*params, *gift_names)
+        )
+        row = cur.fetchone()
+        return int(row[0] or 0) if row else 0
+
+    with get_conn(settings) as conn:
+        reward_count = _count_reward(conn, reward_gifts)
+
+    reward_total = reward_count * reward_unit_price
+
+    return 0, reward_total
