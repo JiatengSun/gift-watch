@@ -1360,16 +1360,6 @@ const renderOpsTimeline = (payload) => {
 
   const values = points.map((p) => Number(p.value || 0)).filter((v) => v >= 0);
   const maxValue = Math.max(...values, 1);
-  const quantile95 = (() => {
-    if (!values.length) return maxValue;
-    const sorted = [...values].sort((a, b) => a - b);
-    const idx = Math.floor(0.95 * (sorted.length - 1));
-    return sorted[idx];
-  })();
-  const effectiveMax = Math.max(
-    Math.max(quantile95 * 1.1, maxValue * 0.35),
-    1
-  );
   container.innerHTML = "";
   container.style.overflowX = payload?.range === "today" ? "hidden" : "auto";
 
@@ -1393,7 +1383,7 @@ const renderOpsTimeline = (payload) => {
     const bar = document.createElement("div");
     bar.className = "bar";
     bar.dataset.value = fmtNumber(p.value || 0);
-    const ratio = Math.min((p.value || 0) / effectiveMax, 1);
+    const ratio = Math.min((p.value || 0) / maxValue, 1);
     const pixelHeight = Math.max(8, Math.round(ratio * barArea));
     bar.style.height = `${pixelHeight}px`;
     const label = document.createElement("div");
