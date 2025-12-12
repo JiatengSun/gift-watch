@@ -149,4 +149,16 @@ def init_db(settings: Settings) -> None:
     with get_conn(settings) as conn:
         _migrate_gifts_room_id(conn)
         _ensure_gifts_room_id(conn)
-        conn.executescript(schema_sql)
+        conn.commit()
+
+        try:
+            conn.executescript(schema_sql)
+        except sqlite3.OperationalError as exc:
+            message = str(exc).lower()
+            if "room_id" not in message or "gifts" not in message:
+                raise
+
+            conn.rollback()
+            _ensure_gifts_room_id(conn)
+            conn.commit()
+            conn.executescript(schema_sql)
