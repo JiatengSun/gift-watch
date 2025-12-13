@@ -8,7 +8,19 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Any
 
-import fcntl
+try:  # pragma: no cover - 平台兼容处理
+    import fcntl  # type: ignore
+except ImportError:  # Windows 平台不存在 fcntl
+    fcntl = None
+    try:
+        import msvcrt  # type: ignore
+    except ImportError:  # pragma: no cover - 理论不会发生
+        msvcrt = None
+    else:
+        # 为了类型提示一致性
+        msvcrt: Any
+else:
+    msvcrt = None
 
 import aiohttp
 from bilibili_api import live
@@ -41,6 +53,7 @@ class AnnouncementService:
             lock_name += f"-{safe_env}"
         self._lock_path = Path(tempfile.gettempdir()) / f"{lock_name}.lock"
         self._lock_fd: Optional[int] = None
+        self._lock_warned: bool = False
 
     async def _is_live(self, settings: Settings) -> bool:
         if not settings.announce_skip_offline:
@@ -98,25 +111,49 @@ class AnnouncementService:
         if self._lock_fd is not None:
             return True
 
-        try:
-            fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            self._lock_fd = fd
-            return True
-        except BlockingIOError:
+        if fcntl:
             try:
-                os.close(fd)
+                fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self._lock_fd = fd
+                return True
+            except BlockingIOError:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
+                return False
             except Exception:
-                pass
-            return False
-        except Exception:
-            return False
+                return False
+
+        if msvcrt:
+            try:
+                fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                self._lock_fd = fd
+                return True
+            except OSError:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
+                return False
+            except Exception:
+                return False
+
+        if not self._lock_warned:
+            self.logger.warning("当前平台不支持文件锁，定时弹幕实例无法自动互斥")
+            self._lock_warned = True
+        return True
 
     def _release_lock(self) -> None:
         if self._lock_fd is None:
             return
         try:
-            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            if fcntl:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            elif msvcrt:
+                msvcrt.locking(self._lock_fd, msvcrt.LK_UNLCK, 1)
         except Exception:
             pass
         try:
