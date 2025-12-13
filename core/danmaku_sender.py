@@ -75,13 +75,21 @@ class DanmakuSender:
             return
 
         self.logger.info("直接发送弹幕 content=%s", trimmed)
-        await self._send_direct(trimmed)
+        response = await self._send_direct(trimmed)
+        self.logger.info("服务器返回 content=%s response=%s", trimmed, response)
 
-    async def _send_direct(self, message: str) -> None:
+    async def _send_direct(self, message: str):
         room = self._get_room()
         try:
-            await room.send_danmaku(live.Danmaku(message))
+            return await room.send_danmaku(live.Danmaku(message))
         except ResponseCodeException as exc:
+            error_data = getattr(exc, "data", None) or getattr(exc, "info", None)
+            self.logger.error(
+                "弹幕发送返回错误 code=%s message=%s data=%s",
+                getattr(exc, "code", None),
+                getattr(exc, "message", None) or str(exc),
+                error_data,
+            )
             if exc.code == 1003212:
                 fallback_limit = max(1, (self.max_length or len(message)) - 1)
                 fallback = message[:fallback_limit]
@@ -89,8 +97,7 @@ class DanmakuSender:
                     self.logger.warning(
                         "弹幕超长已截断 length=%s->%s content=%s", len(message), len(fallback), message
                     )
-                    await room.send_danmaku(live.Danmaku(fallback))
-                    return
+                    return await room.send_danmaku(live.Danmaku(fallback))
             raise
 
     async def _ensure_queue_worker(self) -> None:
@@ -123,11 +130,21 @@ class DanmakuSender:
                     await asyncio.sleep(sleep_for)
 
                 self.logger.info("发送队列弹幕 id=%s content=%s", msg.id, msg.message)
-                await self._send_direct(msg.message)
+                response = await self._send_direct(msg.message)
+                self.logger.info("服务器返回 id=%s response=%s", msg.id, response)
             except ResponseCodeException as exc:
                 if self._queue_task and self._queue_task.cancelled():
                     self.logger.warning("队列任务已取消，停止发送")
                     return
+                error_data = getattr(exc, "data", None) or getattr(exc, "info", None)
+                msg_id = msg.id if "msg" in locals() and msg else "?"
+                self.logger.error(
+                    "弹幕发送返回错误 id=%s code=%s message=%s data=%s",
+                    msg_id,
+                    getattr(exc, "code", None),
+                    getattr(exc, "message", None) or str(exc),
+                    error_data,
+                )
                 if exc.code == 10030:
                     self.logger.warning("弹幕发送过快，%ss 后重试", self._queue.interval_sec)
                     await asyncio.to_thread(

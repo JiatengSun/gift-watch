@@ -48,7 +48,9 @@ async def main() -> None:
     collector.bind_all_handler(pipeline.handle_event)
 
     announcement_task = None
-    if settings.announce_enabled and pipeline.sender is not None:
+    # 始终启动定时弹幕服务，内部会根据最新配置判断是否发送。
+    # 这样即便启动时未开启，后续通过 Web 配置开启后也能生效，无需重启。
+    if pipeline.sender is not None:
         scheduler = AnnouncementService(resolved_env, settings, pipeline.sender)
         announcement_task = scheduler.start()
 
