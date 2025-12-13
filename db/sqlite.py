@@ -10,8 +10,17 @@ def _debug_log(message: str) -> None:
     print(f"[db.init_db] {message}")
 
 
+def _configure_conn(conn: sqlite3.Connection) -> sqlite3.Connection:
+    # Improve concurrency when multiple processes share the same database.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
 def get_conn(settings: Settings) -> sqlite3.Connection:
-    return sqlite3.connect(settings.db_path)
+    conn = sqlite3.connect(settings.db_path, timeout=30, check_same_thread=False)
+    return _configure_conn(conn)
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
