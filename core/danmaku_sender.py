@@ -83,6 +83,13 @@ class DanmakuSender:
         try:
             return await room.send_danmaku(live.Danmaku(message))
         except ResponseCodeException as exc:
+            error_data = getattr(exc, "data", None) or getattr(exc, "info", None)
+            self.logger.error(
+                "弹幕发送返回错误 code=%s message=%s data=%s",
+                getattr(exc, "code", None),
+                getattr(exc, "message", None) or str(exc),
+                error_data,
+            )
             if exc.code == 1003212:
                 fallback_limit = max(1, (self.max_length or len(message)) - 1)
                 fallback = message[:fallback_limit]
@@ -129,6 +136,15 @@ class DanmakuSender:
                 if self._queue_task and self._queue_task.cancelled():
                     self.logger.warning("队列任务已取消，停止发送")
                     return
+                error_data = getattr(exc, "data", None) or getattr(exc, "info", None)
+                msg_id = msg.id if "msg" in locals() and msg else "?"
+                self.logger.error(
+                    "弹幕发送返回错误 id=%s code=%s message=%s data=%s",
+                    msg_id,
+                    getattr(exc, "code", None),
+                    getattr(exc, "message", None) or str(exc),
+                    error_data,
+                )
                 if exc.code == 10030:
                     self.logger.warning("弹幕发送过快，%ss 后重试", self._queue.interval_sec)
                     await asyncio.to_thread(
