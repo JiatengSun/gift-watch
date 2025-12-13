@@ -497,12 +497,32 @@ class IngestPipeline:
     def _allow_thanks(self, key: Any, ts: float, *, ignore_cooldown: bool = False) -> bool:
         daily_sent = self._user_day_thanks.get(key, 0)
         if self.settings.thank_per_user_daily_limit > 0 and daily_sent >= self.settings.thank_per_user_daily_limit:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug(
+                    "感谢节流：已达单日上限 uid=%s sent=%s limit=%s",
+                    key,
+                    daily_sent,
+                    self.settings.thank_per_user_daily_limit,
+                )
             return False
 
-        allowed = self.limiter.allow(key, ts, ignore_cooldown=ignore_cooldown)
-        if allowed:
-            self._user_day_thanks[key] = daily_sent + 1
-        return allowed
+        decision = self.limiter.allow_with_reason(key, ts, ignore_cooldown=ignore_cooldown)
+        if not decision.allowed:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                retry_after = (
+                    f"{decision.retry_after:.2f}s" if decision.retry_after is not None else "n/a"
+                )
+                self.logger.debug(
+                    "感谢节流：跳过 uid=%s reason=%s retry_after=%s daily_count=%s",
+                    key,
+                    decision.reason,
+                    retry_after,
+                    decision.daily_count,
+                )
+            return False
+
+        self._user_day_thanks[key] = daily_sent + 1
+        return True
 
     def _is_target_gift(self, gift: GiftEvent) -> bool:
         if self.settings.thank_mode == "value" and not self.rule.target_gift_ids and not self.rule.target_gift_names:
