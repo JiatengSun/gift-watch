@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import urllib.request
 from typing import Any, Dict, List
 
@@ -10,20 +11,27 @@ from config.settings import Settings
 logger = logging.getLogger(__name__)
 
 
-def _fetch_payload(url: str, headers: Dict[str, str]) -> Dict[str, Any] | None:
+def _fetch_payload(
+    url: str, headers: Dict[str, str], *, timeout: float | None = 3.0
+) -> Dict[str, Any] | None:
     """Attempt to fetch and decode the gift payload from the given URL."""
 
     try:
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
         return json.loads(raw)
     except Exception as exc:  # pragma: no cover - network path
-        logger.warning("获取礼物清单失败：%s", url, exc_info=exc)
+        reason = getattr(exc, "reason", None)
+        is_timeout = isinstance(reason, socket.timeout)
+        log_suffix = "(超时)" if is_timeout else ""
+        logger.warning("获取礼物清单失败%s：%s", log_suffix, url, exc_info=exc)
         return None
 
 
-def fetch_room_gift_list(settings: Settings) -> List[Dict[str, Any]]:
+def fetch_room_gift_list(
+    settings: Settings, *, timeout: float | None = 3.0
+) -> List[Dict[str, Any]]:
     """Fetch the gift list for the configured room.
 
     Returns a simplified schema suitable for the frontend. Tries the primary
@@ -46,7 +54,7 @@ def fetch_room_gift_list(settings: Settings) -> List[Dict[str, Any]]:
 
     payload = None
     for url in candidate_urls:
-        payload = _fetch_payload(url, headers)
+        payload = _fetch_payload(url, headers, timeout=timeout)
         if payload and payload.get("code") == 0:
             break
 

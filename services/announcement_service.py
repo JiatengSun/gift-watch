@@ -1,9 +1,26 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import contextlib
+import logging
+import os
+import tempfile
+from pathlib import Path
 from typing import Optional, Any
+
+try:  # pragma: no cover - 平台兼容处理
+    import fcntl  # type: ignore
+except ImportError:  # Windows 平台不存在 fcntl
+    fcntl = None
+    try:
+        import msvcrt  # type: ignore
+    except ImportError:  # pragma: no cover - 理论不会发生
+        msvcrt = None
+    else:
+        # 为了类型提示一致性
+        msvcrt: Any
+else:
+    msvcrt = None
 
 import aiohttp
 from bilibili_api import live
@@ -30,6 +47,13 @@ class AnnouncementService:
         self._send_lock = asyncio.Lock()
         self._self_uid = getattr(getattr(sender, "credential", None), "dedeuserid", None)
         self._last_log_state: tuple[Any, ...] | None = None
+        lock_name = f"gift-watch-announce-{settings.room_id}"
+        if env_file:
+            safe_env = Path(env_file).name.replace(os.sep, "_")
+            lock_name += f"-{safe_env}"
+        self._lock_path = Path(tempfile.gettempdir()) / f"{lock_name}.lock"
+        self._lock_fd: Optional[int] = None
+        self._lock_warned: bool = False
 
     async def _is_live(self, settings: Settings) -> bool:
         if not settings.announce_skip_offline:
@@ -82,6 +106,60 @@ class AnnouncementService:
         self._danmaku_count = 0
         self.logger.debug("弹幕触发计数达到阈值 %s，准备发送定时弹幕", threshold)
         await self._send_next_message(settings)
+
+    def _acquire_lock(self) -> bool:
+        if self._lock_fd is not None:
+            return True
+
+        if fcntl:
+            try:
+                fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self._lock_fd = fd
+                return True
+            except BlockingIOError:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
+                return False
+            except Exception:
+                return False
+
+        if msvcrt:
+            try:
+                fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                self._lock_fd = fd
+                return True
+            except OSError:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
+                return False
+            except Exception:
+                return False
+
+        if not self._lock_warned:
+            self.logger.warning("当前平台不支持文件锁，定时弹幕实例无法自动互斥")
+            self._lock_warned = True
+        return True
+
+    def _release_lock(self) -> None:
+        if self._lock_fd is None:
+            return
+        try:
+            if fcntl:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            elif msvcrt:
+                msvcrt.locking(self._lock_fd, msvcrt.LK_UNLCK, 1)
+        except Exception:
+            pass
+        try:
+            os.close(self._lock_fd)
+        finally:
+            self._lock_fd = None
 
     def _extract_uid(self, event: dict[str, Any]) -> Optional[int]:
         info = event.get("info") or event.get("data") or {}
@@ -164,52 +242,73 @@ class AnnouncementService:
 
     async def _loop(self) -> None:
         # Reload settings on every iteration so config changes apply without restart.
-        while True:
-            settings = get_settings(self.env_file)
-            interval = max(settings.announce_interval_sec, 30)
-            messages = [msg.strip() for msg in settings.announce_messages if msg.strip()]
-            if messages != self._last_messages:
-                self._message_index = 0
-                self._last_messages = list(messages)
+        try:
+            while True:
+                try:
+                    if not self._acquire_lock():
+                        signature = ("locked",)
+                        if signature != self._last_log_state:
+                            self.logger.warning(
+                                "检测到其他定时弹幕实例正在运行，当前实例暂停发送 (lock=%s)",
+                                self._lock_path,
+                            )
+                            self._last_log_state = signature
+                        await asyncio.sleep(10)
+                        continue
 
-            if not settings.announce_enabled or not messages:
-                signature = ("disabled", settings.announce_enabled, bool(messages))
-                if signature != self._last_log_state:
-                    self.logger.debug("定时弹幕未启用或内容为空，等待配置更新后再检查")
-                    self._last_log_state = signature
-                await self._stop_danmaku_listener()
-                await asyncio.sleep(interval)
-                continue
+                    settings = get_settings(self.env_file)
+                    interval = max(settings.announce_interval_sec, 30)
+                    messages = [msg.strip() for msg in settings.announce_messages if msg.strip()]
+                    if messages != self._last_messages:
+                        self._message_index = 0
+                        self._last_messages = list(messages)
 
-            if settings.announce_mode == "message_count":
-                await self._ensure_danmaku_listener(settings)
-                signature = (
-                    "message_count",
-                    max(settings.announce_danmaku_threshold, 1),
-                    settings.announce_skip_offline,
-                )
-                if signature != self._last_log_state:
-                    self.logger.debug(
-                        "定时弹幕检查: 弹幕触发模式，阈值 %s 条，开播时发送=%s",
-                        signature[1],
-                        signature[2],
-                    )
-                    self._last_log_state = signature
-                await asyncio.sleep(5)
-                continue
+                    if not settings.announce_enabled or not messages:
+                        signature = ("disabled", settings.announce_enabled, bool(messages))
+                        if signature != self._last_log_state:
+                            self.logger.debug("定时弹幕未启用或内容为空，等待配置更新后再检查")
+                            self._last_log_state = signature
+                        await self._stop_danmaku_listener()
+                        await asyncio.sleep(interval)
+                        continue
 
+                    if settings.announce_mode == "message_count":
+                        await self._ensure_danmaku_listener(settings)
+                        signature = (
+                            "message_count",
+                            max(settings.announce_danmaku_threshold, 1),
+                            settings.announce_skip_offline,
+                        )
+                        if signature != self._last_log_state:
+                            self.logger.debug(
+                                "定时弹幕检查: 弹幕触发模式，阈值 %s 条，开播时发送=%s",
+                                signature[1],
+                                signature[2],
+                            )
+                            self._last_log_state = signature
+                        await asyncio.sleep(5)
+                        continue
+
+                    await self._stop_danmaku_listener()
+                    signature = ("interval", interval, settings.announce_skip_offline)
+                    if signature != self._last_log_state:
+                        self.logger.debug(
+                            "定时弹幕检查: 间隔 %ss，开播时发送=%s",
+                            interval,
+                            settings.announce_skip_offline,
+                        )
+                        self._last_log_state = signature
+
+                    await self._send_next_message(settings)
+                    await asyncio.sleep(interval)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    self.logger.exception("定时弹幕循环异常，5 秒后重试")
+                    await asyncio.sleep(5)
+        finally:
             await self._stop_danmaku_listener()
-            signature = ("interval", interval, settings.announce_skip_offline)
-            if signature != self._last_log_state:
-                self.logger.debug(
-                    "定时弹幕检查: 间隔 %ss，开播时发送=%s",
-                    interval,
-                    settings.announce_skip_offline,
-                )
-                self._last_log_state = signature
-
-            await self._send_next_message(settings)
-            await asyncio.sleep(interval)
+            self._release_lock()
 
     def start(self) -> asyncio.Task:
         if self._task is None:

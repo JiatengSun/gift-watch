@@ -430,13 +430,17 @@ class IngestPipeline:
                 self.logger.debug("盲盒查询冷却中 uid=%s uname=%s", uid, uname)
             return
 
-        base_total, reward_total = query_blind_box_totals(
-            self.settings,
-            uid=uid,
-            uname=uname or None,
-            base_gift=self.settings.blind_box_base_gift,
-            reward_gifts=self.settings.blind_box_rewards,
-        )
+        try:
+            base_total, reward_total = query_blind_box_totals(
+                self.settings,
+                uid=uid,
+                uname=uname or None,
+                base_gift=self.settings.blind_box_base_gift,
+                reward_gifts=self.settings.blind_box_rewards,
+            )
+        except Exception:
+            self.logger.exception("盲盒查询失败：读取礼物记录时出错")
+            return
         profit = reward_total - base_total
 
         context = {
