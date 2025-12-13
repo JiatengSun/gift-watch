@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+
+@dataclass
+class RateLimitDecision:
+    allowed: bool
+    reason: Optional[str] = None
+    retry_after: Optional[float] = None
+    daily_count: Optional[int] = None
 
 @dataclass
 class RateLimiter:
@@ -18,16 +26,35 @@ class RateLimiter:
     def _day_key(self, ts: float) -> str:
         return time.strftime("%Y-%m-%d", time.localtime(ts))
 
-    def allow(self, uid: Any, ts: float | None = None, ignore_cooldown: bool = False) -> bool:
+    def allow(
+        self, uid: Any, ts: float | None = None, ignore_cooldown: bool = False
+    ) -> bool:
+        return self.allow_with_reason(uid, ts=ts, ignore_cooldown=ignore_cooldown).allowed
+
+    def allow_with_reason(
+        self, uid: Any, ts: float | None = None, ignore_cooldown: bool = False
+    ) -> RateLimitDecision:
         now = ts or time.time()
 
         if not ignore_cooldown:
-            if self.global_cooldown_sec > 0 and (now - self._last_global_ts) < self.global_cooldown_sec:
-                return False
+            if self.global_cooldown_sec > 0:
+                remaining = self.global_cooldown_sec - (now - self._last_global_ts)
+                if remaining > 0:
+                    return RateLimitDecision(
+                        allowed=False,
+                        reason="global_cooldown",
+                        retry_after=remaining,
+                    )
 
             last = self._last_user_ts.get(uid, 0.0)
-            if self.per_user_cooldown_sec > 0 and (now - last) < self.per_user_cooldown_sec:
-                return False
+            if self.per_user_cooldown_sec > 0:
+                remaining = self.per_user_cooldown_sec - (now - last)
+                if remaining > 0:
+                    return RateLimitDecision(
+                        allowed=False,
+                        reason="per_user_cooldown",
+                        retry_after=remaining,
+                    )
 
         day = self._day_key(now)
         last_day = self._user_day.get(uid)
@@ -36,10 +63,17 @@ class RateLimiter:
             daily_count = 0
 
         if self.per_user_daily_limit > 0 and daily_count >= self.per_user_daily_limit:
-            return False
+            return RateLimitDecision(
+                allowed=False,
+                reason="daily_limit",
+                daily_count=daily_count,
+            )
 
         self._last_global_ts = now
         self._last_user_ts[uid] = now
         self._user_day[uid] = day
         self._user_day_count[uid] = daily_count + 1
-        return True
+        return RateLimitDecision(
+            allowed=True,
+            daily_count=daily_count + 1,
+        )
