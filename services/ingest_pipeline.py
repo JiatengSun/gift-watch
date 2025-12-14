@@ -52,6 +52,30 @@ class IngestPipeline:
         self._user_day_thanks: Dict[Any, int] = {}
         self._blind_box_cooldown: Dict[Any, float] = {}
 
+    def _coerce_event_object(self, event: Any) -> dict[str, Any] | None:
+        """Convert bilibili-api event objects into plain dictionaries.
+
+        Recent bilibili-api versions wrap danmaku/gift messages in typed objects
+        instead of dicts. Accessing attributes like ``event.get`` on those
+        objects would raise ``AttributeError`` and break the ingest loop.
+        """
+
+        if isinstance(event, dict):
+            return event
+
+        if hasattr(event, "__dict__"):
+            coerced = dict(vars(event))
+            for key in ("data", "info"):
+                inner = getattr(event, key, None)
+                if isinstance(inner, dict):
+                    coerced.setdefault(key, inner)
+            # Some bilibili-api objects expose the command name via ``cmd`` or
+            # ``command`` attributes; copying __dict__ above will already catch
+            # them when present.
+            return coerced
+
+        return None
+
     def _refresh_sender(self) -> None:
         if not self.settings.bot_sessdata or not self.settings.bot_bili_jct:
             self.sender = None
@@ -110,6 +134,14 @@ class IngestPipeline:
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
         self._refresh_settings()
+        coerced_event = self._coerce_event_object(event)
+        if coerced_event is None:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.debug(
+                    "忽略无法解析的事件类型 type=%s", type(event).__name__
+                )
+            return
+        event = coerced_event
         # AsyncEvent 会在触发任意事件时再派发一次 __ALL__，形式为
         # {"name": "<cmd>", "data": (<event>,)}，这里兼容这种结构。
         if isinstance(event, dict) and "name" in event and "data" in event:
@@ -278,6 +310,13 @@ class IngestPipeline:
                 if isinstance(item, dict):
                     return item
 
+        if hasattr(raw, "__dict__"):
+            coerced = dict(vars(raw))
+            inner = getattr(raw, "data", None)
+            if isinstance(inner, dict):
+                coerced.setdefault("data", inner)
+            return coerced
+
     def _is_danmaku_event(self, event: dict[str, Any], cmd: str | None) -> bool:
         if isinstance(cmd, str) and cmd.startswith("DANMU_MSG"):
             return True
@@ -290,15 +329,6 @@ class IngestPipeline:
             info = event.get("info") if isinstance(event, dict) else None
 
         return isinstance(info, (list, tuple)) and len(info) >= 2
-
-        if hasattr(raw, "__dict__"):
-            coerced = dict(vars(raw))
-            inner = getattr(raw, "data", None)
-            if isinstance(inner, dict):
-                coerced.setdefault("data", inner)
-            return coerced
-
-        return None
 
     def _is_gift_like_event(self, event: dict[str, Any]) -> bool:
         data = event.get("data") or {}
