@@ -2089,11 +2089,20 @@ async function loadShares(viewKey) {
       container,
       data,
       [
-        { key: "uname", label: "用户" },
-        { key: "uid", label: "UID", className: "number", render: (v) => fmtNumber(v) },
+        { key: "uname", label: "用户名" },
+        {
+          key: "home",
+          label: "主页链接",
+          render: (_, row) => {
+            const uid = String(row?.uid ?? "").trim();
+            if (!uid) return "-";
+            return `<a href="https://space.bilibili.com/${uid}" target="_blank" rel="noopener noreferrer">space/${uid}</a>`;
+          },
+        },
+        { key: "last_share_ts", label: "最近分享", render: (v) => fmtTime(v) },
         { key: "share_count", label: "分享次数", className: "number", render: (v) => fmtNumber(v) },
         { key: "first_share_ts", label: "首次分享", render: (v) => fmtTime(v) },
-        { key: "last_share_ts", label: "最近分享", render: (v) => fmtTime(v) },
+        { key: "uid", label: "UID", className: "number", render: (v) => String(v ?? "") },
       ],
       "暂无分享记录"
     );
