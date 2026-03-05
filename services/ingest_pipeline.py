@@ -14,6 +14,7 @@ from core.gift_parser import (
     SUPPORTED_GIFT_CMDS,
     parse_guard_buy,
     parse_send_gift,
+    parse_share_event,
 )
 from db.repo import insert_gift, query_blind_box_totals
 from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
@@ -172,6 +173,14 @@ class IngestPipeline:
 
         if self._is_danmaku_event(event, cmd):
             await self._handle_blind_box_query(event)
+            return
+
+        if cmd == "INTERACT_WORD":
+            share_gift = parse_share_event(event, room_id=self.settings.room_id)
+            if share_gift is None:
+                return
+            insert_gift(self.settings, share_gift)
+            self.logger.info("🔁 收到分享：uid=%s uname=%s", share_gift.uid, share_gift.uname)
             return
 
         gift_like = self._is_gift_like_event(event)

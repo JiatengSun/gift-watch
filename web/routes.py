@@ -19,6 +19,7 @@ from db.repo import (
     query_recent_gifts,
     query_flow_summary,
     query_user_events,
+    query_share_leaderboard,
 )
 from services.gift_list_service import fetch_room_gift_list
 
@@ -203,6 +204,35 @@ def search(
             "gift_name": r[4],
             "num": r[5],
             "total_price": r[6],
+        }
+        for r in rows
+    ]
+
+
+
+
+@router.get("/api/shares")
+def list_shares(
+    limit: int = Query(100, ge=1, le=1000),
+    start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
+    end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
+):
+    settings = get_settings(_resolve_env(env))
+    rows = query_share_leaderboard(
+        settings,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        limit=limit,
+    )
+
+    return [
+        {
+            "uid": r[0],
+            "uname": r[1],
+            "share_count": r[2],
+            "first_share_ts": r[3],
+            "last_share_ts": r[4],
         }
         for r in rows
     ]
