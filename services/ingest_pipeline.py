@@ -14,6 +14,8 @@ from core.gift_parser import (
     SUPPORTED_GIFT_CMDS,
     parse_guard_buy,
     parse_send_gift,
+    parse_share_event,
+    normalize_cmd,
 )
 from db.repo import insert_gift, query_blind_box_totals
 from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
@@ -158,9 +160,10 @@ class IngestPipeline:
                     inner_event["cmd"] = event["name"]
                 event = inner_event
 
-        cmd = event.get("cmd") or event.get("command") or event.get("type")
-        if cmd and "cmd" not in event:
-            event["cmd"] = cmd
+        raw_cmd = event.get("cmd") or event.get("command") or event.get("type")
+        cmd = normalize_cmd(raw_cmd)
+        if raw_cmd and "cmd" not in event:
+            event["cmd"] = raw_cmd
 
         coerced_data = self._coerce_event_data(event)
         if coerced_data is not None and coerced_data is not event.get("data"):
@@ -168,10 +171,18 @@ class IngestPipeline:
             event["data"] = coerced_data
             # 可能在 data 中携带更准确的命令
             if not cmd:
-                cmd = event.get("cmd") or event.get("command") or event.get("type")
+                cmd = normalize_cmd(event.get("cmd") or event.get("command") or event.get("type"))
 
         if self._is_danmaku_event(event, cmd):
             await self._handle_blind_box_query(event)
+            return
+
+        if cmd == "INTERACT_WORD":
+            share_gift = parse_share_event(event, room_id=self.settings.room_id)
+            if share_gift is None:
+                return
+            insert_gift(self.settings, share_gift)
+            self.logger.info("🔁 收到分享：uid=%s uname=%s", share_gift.uid, share_gift.uname)
             return
 
         gift_like = self._is_gift_like_event(event)

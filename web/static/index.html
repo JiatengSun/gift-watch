@@ -571,6 +571,17 @@
           </div>
           <div id="allOut-desktop"></div>
         </div>
+
+        <div class="card">
+          <div class="section-header">
+            <h2>分享榜单</h2>
+            <div class="row" style="gap:12px;">
+              <button id="btnLoadShares-desktop">刷新</button>
+              <span class="hint">统计谁分享了直播间，默认显示最近 100 位。</span>
+            </div>
+          </div>
+          <div id="shareOut-desktop"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -618,6 +629,17 @@
           </div>
         </div>
         <div id="allOut-mobile"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="section-header">
+          <h2>分享榜单</h2>
+          <div class="row" style="gap:12px;">
+            <button id="btnLoadShares-mobile">刷新</button>
+            <span class="hint">展示最近的分享用户与次数。</span>
+          </div>
+        </div>
+        <div id="shareOut-mobile"></div>
       </div>
     </div>
 
@@ -811,6 +833,17 @@
             </div>
           </div>
           <div id="allOut-tablet"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-header">
+            <h2>分享榜单</h2>
+            <div class="row" style="gap:12px;">
+              <button id="btnLoadShares-tablet">刷新</button>
+              <span class="hint">可快速查看谁在帮你扩散直播间。</span>
+            </div>
+          </div>
+          <div id="shareOut-tablet"></div>
         </div>
       </div>
     </div>
@@ -1088,6 +1121,7 @@ const viewConfigs = {
       outputs: { summary: "searchSummary-desktop", aggregated: "searchAggregated-desktop", raw: "searchRaw-desktop" },
     },
     latest: { button: "btnLoadAll-desktop", output: "allOut-desktop" },
+    shares: { button: "btnLoadShares-desktop", output: "shareOut-desktop" },
     roomGifts: { button: "btnLoadRoomGifts", output: "roomGiftsOut" },
   },
   mobile: {
@@ -1104,6 +1138,7 @@ const viewConfigs = {
       outputs: { summary: "searchSummary-mobile", aggregated: "searchAggregated-mobile", raw: "searchRaw-mobile" },
     },
     latest: { button: "btnLoadAll-mobile", output: "allOut-mobile" },
+    shares: { button: "btnLoadShares-mobile", output: "shareOut-mobile" },
   },
   tablet: {
     root: document.getElementById("view-tablet"),
@@ -1119,6 +1154,7 @@ const viewConfigs = {
       outputs: { summary: "searchSummary-tablet", aggregated: "searchAggregated-tablet", raw: "searchRaw-tablet" },
     },
     latest: { button: "btnLoadAll-tablet", output: "allOut-tablet" },
+    shares: { button: "btnLoadShares-tablet", output: "shareOut-tablet" },
   },
   ops: {
     root: document.getElementById("view-ops"),
@@ -1129,7 +1165,7 @@ const viewConfigs = {
 };
 
 const viewState = Object.fromEntries(
-  Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, roomLoaded: false, settingsLoaded: false, latestPage: 1 }])
+  Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, loadedShares: false, roomLoaded: false, settingsLoaded: false, latestPage: 1 }])
 );
 
 let opsUsersCache = [];
@@ -2017,6 +2053,36 @@ async function loadAll(viewKey, targetPage) {
   }
 }
 
+async function loadShares(viewKey) {
+  const cfg = viewConfigs[viewKey];
+  const container = document.getElementById(cfg?.shares?.output || "");
+  if (!container) return;
+
+  try {
+    const resp = await fetch(buildUrl("/api/shares", { limit: 100 }));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    renderTable(
+      container,
+      data,
+      [
+        { key: "uname", label: "用户" },
+        { key: "uid", label: "UID", className: "number", render: (v) => fmtNumber(v) },
+        { key: "share_count", label: "分享次数", className: "number", render: (v) => fmtNumber(v) },
+        { key: "first_share_ts", label: "首次分享", render: (v) => fmtTime(v) },
+        { key: "last_share_ts", label: "最近分享", render: (v) => fmtTime(v) },
+      ],
+      "暂无分享记录"
+    );
+    viewState[viewKey].loadedShares = true;
+  } catch (err) {
+    viewState[viewKey].loadedShares = false;
+    container.innerHTML = `<div class="empty">加载分享榜失败：${err.message || err}</div>`;
+  }
+}
+
 async function loadRoomGiftList() {
   const out = document.getElementById("roomGiftsOut");
   out.innerHTML = "<div class='muted'>加载中...</div>";
@@ -2093,6 +2159,9 @@ const initView = (viewKey) => {
     if (cfg.latest) {
       document.getElementById(cfg.latest.button)?.addEventListener("click", () => loadAll(viewKey, 1));
     }
+    if (cfg.shares) {
+      document.getElementById(cfg.shares.button)?.addEventListener("click", () => loadShares(viewKey));
+    }
     if (cfg.roomGifts) {
       document.getElementById(cfg.roomGifts.button)?.addEventListener("click", loadRoomGiftList);
     }
@@ -2116,6 +2185,9 @@ const switchView = (target) => {
   }
   if (cfg.latest && !viewState[target].loadedAll) {
     loadAll(target);
+  }
+  if (cfg.shares && !viewState[target].loadedShares) {
+    loadShares(target);
   }
   if (target === "desktop" && !viewState.desktop.roomLoaded) {
     loadRoomGiftList();

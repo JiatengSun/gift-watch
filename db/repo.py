@@ -447,3 +447,35 @@ def query_blind_box_totals(
     base_total = reward_count * 15000
 
     return base_total, reward_total
+
+
+def query_share_leaderboard(
+    settings: Settings,
+    *,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    limit: int = 100,
+) -> list[tuple]:
+    with get_conn(settings) as conn:
+        clauses = ["room_id = ?", "gift_id = ?"]
+        params: list[object] = [settings.room_id, -100]
+        _append_ts_clauses(conn, clauses, params, start_ts, end_ts)
+        where = "WHERE " + " AND ".join(clauses)
+
+        cur = conn.execute(
+            f"""
+            SELECT
+              uid,
+              uname,
+              COUNT(*) as share_count,
+              MIN(ts) as first_share_ts,
+              MAX(ts) as last_share_ts
+            FROM gifts
+            {where}
+            GROUP BY uid, uname
+            ORDER BY share_count DESC, last_share_ts DESC
+            LIMIT ?
+            """,
+            (*params, limit),
+        )
+        return cur.fetchall()
