@@ -33,7 +33,7 @@ class PendingThanks:
 
 class IngestPipeline:
     THANK_DELAY_SECONDS = 5
-    SHARE_DEDUP_CACHE_SECONDS = 600
+    SHARE_DEDUP_CACHE_SECONDS = 3
 
     def __init__(
         self,
