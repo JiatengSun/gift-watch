@@ -25,6 +25,19 @@ SHARE_GIFT_ID = -100
 SHARE_GIFT_NAME = "分享了直播间"
 
 
+def normalize_cmd(cmd: Any) -> str:
+    text = str(cmd or "").strip()
+    if not text:
+        return ""
+
+    head = text.split(":", 1)[0].strip().upper()
+    if head.startswith("DANMU_MSG"):
+        return "DANMU_MSG"
+    if head.startswith("INTERACT_WORD"):
+        return "INTERACT_WORD"
+    return head
+
+
 def _resolve_guard_name(guard_level: int) -> str:
     return GUARD_LEVEL_NAMES.get(guard_level, "大航海")
 
@@ -170,7 +183,7 @@ def parse_send_gift(
 
 
 def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
-    cmd = event.get("cmd") or event.get("command")
+    cmd = normalize_cmd(event.get("cmd") or event.get("command") or event.get("type"))
     if cmd != "INTERACT_WORD":
         return None
 
@@ -178,8 +191,11 @@ def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent
     inner_data = outer_data.get("data") if isinstance(outer_data, dict) else None
     data = inner_data if isinstance(inner_data, dict) else outer_data if isinstance(outer_data, dict) else {}
 
+    msg_type_raw = data.get("msg_type")
+    if msg_type_raw is None and isinstance(outer_data, dict):
+        msg_type_raw = outer_data.get("msg_type")
     try:
-        msg_type = int(data.get("msg_type") or 0)
+        msg_type = int(msg_type_raw or 0)
     except Exception:
         msg_type = 0
     if msg_type != INTERACT_SHARE_MSG_TYPE:

@@ -12,6 +12,7 @@ from core.gift_parser import (
     GiftEvent,
     GUARD_LEVEL_NAMES,
     SUPPORTED_GIFT_CMDS,
+    normalize_cmd,
     parse_guard_buy,
     parse_send_gift,
     parse_share_event,
@@ -149,6 +150,8 @@ class IngestPipeline:
             data = event.get("data")
             if isinstance(data, (list, tuple)) and data and isinstance(data[0], dict):
                 inner_event = dict(data[0])
+            elif isinstance(data, (list, tuple)) and data:
+                inner_event = self._coerce_event_object(data[0])
             elif isinstance(data, dict):
                 inner_event = dict(data)
             else:
@@ -179,6 +182,13 @@ class IngestPipeline:
         if cmd == "INTERACT_WORD":
             share_gift = parse_share_event(event, room_id=self.settings.room_id)
             if share_gift is None:
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+                    self.logger.debug(
+                        "收到 INTERACT_WORD 但非分享事件 msg_type=%s keys=%s",
+                        data.get("msg_type"),
+                        list(event.keys()),
+                    )
                 return
             insert_gift(self.settings, share_gift)
             self.logger.info("🔁 收到分享：uid=%s uname=%s", share_gift.uid, share_gift.uname)
