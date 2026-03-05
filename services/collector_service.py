@@ -60,6 +60,11 @@ class CollectorService:
         # LiveDanmaku installs its own StreamHandler; prevent the same record
         # from propagating to root and being printed twice.
         danmaku_logger.propagate = False
+        if len(danmaku_logger.handlers) > 1:
+            keep = danmaku_logger.handlers[0]
+            for handler in list(danmaku_logger.handlers)[1:]:
+                danmaku_logger.removeHandler(handler)
+            danmaku_logger.handlers = [keep]
 
         has_filter = any(isinstance(f, _LiveDanmakuLogFilter) for f in danmaku_logger.filters)
         if not has_filter:

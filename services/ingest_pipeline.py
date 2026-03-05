@@ -16,6 +16,7 @@ from core.gift_parser import (
     parse_guard_buy,
     parse_send_gift,
     parse_share_event,
+    probe_share_event,
 )
 from db.repo import insert_gift, query_blind_box_totals
 from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
@@ -189,10 +190,10 @@ class IngestPipeline:
             share_gift = parse_share_event(event, room_id=self.settings.room_id)
             if share_gift is None:
                 if self.logger.isEnabledFor(logging.DEBUG):
-                    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+                    probe = probe_share_event(event)
                     self.logger.debug(
-                        "收到 INTERACT_WORD 但非分享事件 msg_type=%s keys=%s",
-                        data.get("msg_type"),
+                        "收到 INTERACT_WORD 但非分享事件 probe=%s keys=%s",
+                        probe,
                         list(event.keys()),
                     )
                 return

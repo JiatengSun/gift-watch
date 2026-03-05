@@ -107,6 +107,55 @@ def _extract_uname(candidates: list[dict[str, Any]]) -> str:
     return ""
 
 
+def _extract_uid(candidates: list[dict[str, Any]]) -> int:
+    uid_raw = _pick_first_value(candidates, ("uid", "user_id"))
+    if uid_raw is None:
+        for obj in candidates:
+            user_info = obj.get("user_info")
+            if isinstance(user_info, dict) and user_info.get("uid") is not None:
+                uid_raw = user_info.get("uid")
+                break
+    try:
+        return int(uid_raw or 0)
+    except Exception:
+        return 0
+
+
+def probe_share_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Return key fields used for share-event diagnostics."""
+
+    cmd_raw = event.get("cmd") or event.get("command") or event.get("type")
+    cmd = normalize_cmd(cmd_raw)
+    outer_data = event.get("data")
+    candidates = _iter_candidate_dicts(outer_data)
+    if isinstance(event, dict):
+        candidates.extend(_iter_candidate_dicts(event))
+
+    msg_type_raw = _pick_first_value(candidates, ("msg_type", "msgType"))
+    try:
+        msg_type = int(msg_type_raw or 0)
+    except Exception:
+        msg_type = None
+
+    action_raw = _pick_first_value(
+        candidates,
+        ("action", "action_type", "trigger", "event", "event_type", "interact_type"),
+    )
+    action = str(action_raw or "").strip().lower()
+    uid = _extract_uid(candidates)
+    uname = _extract_uname(candidates)
+    ts_raw = _pick_first_value(candidates, ("timestamp", "trigger_time", "triggerTime"))
+
+    return {
+        "cmd": cmd,
+        "msg_type": msg_type,
+        "action": action,
+        "uid": uid,
+        "uname": uname,
+        "ts_raw": ts_raw,
+    }
+
+
 def parse_guard_buy(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
     cmd = normalize_cmd(event.get("cmd") or event.get("command"))
     if cmd != "GUARD_BUY":
@@ -272,17 +321,16 @@ def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent
     if not is_share_msg_type and not is_share_action:
         return None
 
-    uid_raw = _pick_first_value(candidates, ("uid", "user_id"))
-    try:
-        uid = int(uid_raw or 0)
-    except Exception:
-        uid = 0
+    uid = _extract_uid(candidates)
     uname = _extract_uname(candidates)
     ts_raw = _pick_first_value(candidates, ("timestamp", "trigger_time", "triggerTime"))
     if ts_raw is None:
         ts_raw = event.get("timestamp")
     ts = int(ts_raw or time.time())
     raw_json = json.dumps(event, ensure_ascii=False)
+
+    if not uname and uid > 0:
+        uname = f"uid_{uid}"
 
     if not uname:
         return None
