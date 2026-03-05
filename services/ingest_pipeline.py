@@ -4,6 +4,7 @@ from typing import Any, Awaitable, Callable, DefaultDict, Dict, Optional
 import logging
 import asyncio
 import time
+import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -19,6 +20,7 @@ from core.gift_parser import (
     probe_share_event,
 )
 from db.repo import insert_gift, query_blind_box_totals
+from db.repo import insert_danmaku_event
 from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
 from core.rate_limiter import RateLimiter
 from core.danmaku_sender import DanmakuSender
@@ -30,6 +32,13 @@ class PendingThanks:
     uname: str
     gifts: DefaultDict[str, int] = field(default_factory=lambda: defaultdict(int))
     task: Optional[asyncio.Task] = None
+
+
+def json_dumps_safe(payload: Any) -> str:
+    try:
+        return json.dumps(payload, ensure_ascii=False, default=str)
+    except Exception:
+        return "{}"
 
 class IngestPipeline:
     THANK_DELAY_SECONDS = 5
@@ -184,6 +193,22 @@ class IngestPipeline:
                 cmd = normalize_cmd(event.get("cmd") or event.get("command") or event.get("type"))
 
         if self._is_danmaku_event(event, cmd):
+            parsed = self._parse_danmaku_event(event)
+            if parsed is not None:
+                uid, uname, content = parsed
+                if content:
+                    try:
+                        event_ts = self._extract_event_ts(event)
+                        insert_danmaku_event(
+                            self.settings,
+                            ts=event_ts,
+                            uid=uid,
+                            uname=uname or "",
+                            content=content,
+                            raw_json=json_dumps_safe(event),
+                        )
+                    except Exception:
+                        self.logger.exception("写入弹幕事件失败")
             for listener in self._danmaku_listeners:
                 try:
                     await listener(event)
@@ -344,6 +369,29 @@ class IngestPipeline:
             uname = str(event.get("uname") or event.get("user") or "").strip()
 
         return uid, uname, content
+
+    def _extract_event_ts(self, event: dict[str, Any]) -> int:
+        data = event.get("data")
+        candidates: list[Any] = [event, data]
+        if isinstance(data, dict):
+            candidates.append(data.get("data"))
+
+        for obj in candidates:
+            if not isinstance(obj, dict):
+                continue
+            for key in ("timestamp", "ts", "send_time", "trigger_time"):
+                raw = obj.get(key)
+                if raw is None:
+                    continue
+                try:
+                    val = int(raw)
+                except Exception:
+                    continue
+                if val > 1_000_000_000_000:
+                    val = val // 1000
+                if val > 0:
+                    return val
+        return int(time.time())
 
     def _coerce_event_data(self, event: dict[str, Any]) -> dict[str, Any] | None:
         raw = event.get("data")

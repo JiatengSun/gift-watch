@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 
 from config.settings import Settings
@@ -19,6 +19,66 @@ def insert_gift(settings: Settings, gift: GiftEvent) -> None:
             """,
             (gift.ts, gift.room_id, gift.uid, gift.uname, gift.gift_id, gift.gift_name, gift.num, gift.total_price, gift.raw_json),
         )
+
+
+def insert_danmaku_event(
+    settings: Settings,
+    *,
+    ts: int,
+    uid: int | None,
+    uname: str,
+    content: str,
+    raw_json: str,
+) -> None:
+    with get_conn(settings) as conn:
+        conn.execute(
+            """
+            INSERT INTO danmaku_events(ts, room_id, uid, uname, content, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (ts, settings.room_id, uid, uname, content, raw_json),
+        )
+
+
+def query_danmaku_events(settings: Settings, start_ts: int, end_ts: int) -> list[tuple]:
+    with get_conn(settings) as conn:
+        cur = conn.execute(
+            """
+            SELECT uid, uname, content, ts
+            FROM danmaku_events
+            WHERE room_id = ? AND ts >= ? AND ts < ?
+            """,
+            (settings.room_id, start_ts, end_ts),
+        )
+        return cur.fetchall()
+
+
+def query_gift_totals_by_user(settings: Settings, start_ts: int, end_ts: int) -> Dict[str, int]:
+    with get_conn(settings) as conn:
+        cur = conn.execute(
+            """
+            SELECT
+              uid,
+              uname,
+              COALESCE(SUM(total_price), 0) as total_price
+            FROM gifts
+            WHERE room_id = ?
+              AND ts >= ?
+              AND ts < ?
+              AND total_price > 0
+            GROUP BY uid, uname
+            """,
+            (settings.room_id, start_ts, end_ts),
+        )
+        rows = cur.fetchall()
+
+    out: Dict[str, int] = {}
+    for uid, uname, total_price in rows:
+        key = str(uid) if uid is not None else (uname or "")
+        if not key:
+            continue
+        out[key] = int(total_price or 0)
+    return out
 
 
 def query_user_events(settings: Settings, start_ts: int, end_ts: int) -> list[tuple]:

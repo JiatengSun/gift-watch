@@ -35,3 +35,16 @@ CREATE TABLE IF NOT EXISTS danmaku_queue_meta (
   room_id INTEGER PRIMARY KEY,
   last_sent_at REAL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS danmaku_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts INTEGER NOT NULL,
+  room_id INTEGER NOT NULL,
+  uid INTEGER,
+  uname TEXT,
+  content TEXT NOT NULL,
+  raw_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_danmaku_events_room_ts ON danmaku_events(room_id, ts);
+CREATE INDEX IF NOT EXISTS idx_danmaku_events_room_uid_ts ON danmaku_events(room_id, uid, ts);

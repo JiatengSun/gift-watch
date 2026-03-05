@@ -19,6 +19,8 @@ from db.repo import (
     query_recent_gifts,
     query_flow_summary,
     query_user_events,
+    query_danmaku_events,
+    query_gift_totals_by_user,
     query_share_leaderboard,
 )
 from services.gift_list_service import fetch_room_gift_list
@@ -385,10 +387,11 @@ def engagement_panel(
     session_rows: list[dict] = []
 
     for idx, (start_dt, end_dt) in enumerate(ranges):
-        rows = query_user_events(settings, int(start_dt.timestamp()), int(end_dt.timestamp()))
+        rows = query_danmaku_events(settings, int(start_dt.timestamp()), int(end_dt.timestamp()))
         users_this_session: set[str] = set()
+        gift_totals = query_gift_totals_by_user(settings, int(start_dt.timestamp()), int(end_dt.timestamp()))
 
-        for uid, uname, raw_json, gift_id, total_price, ts in rows:
+        for uid, uname, content, ts in rows:
             key = str(uid) if uid is not None else (uname or "")
             if not key:
                 continue
@@ -398,13 +401,17 @@ def engagement_panel(
             profile["uname"] = uname
             profile["sessions"].add(idx)
             profile["message_count"] += 1
-            profile["total_price"] += int(total_price or 0)
-            profile["total_length"] += _extract_message_length(raw_json or "")
-            profile["sent_gift"] = profile["sent_gift"] or bool(gift_id) or (total_price or 0) > 0
+            profile["total_length"] += len(str(content or ""))
             profile["first_ts"] = ts if profile["first_ts"] is None else min(profile["first_ts"], ts)
             profile["last_ts"] = ts if profile["last_ts"] is None else max(profile["last_ts"], ts)
 
             users_this_session.add(key)
+
+        for key in users_this_session:
+            price = int(gift_totals.get(key, 0) or 0)
+            profile = user_stats[key]
+            profile["total_price"] += price
+            profile["sent_gift"] = profile["sent_gift"] or price > 0
 
         session_users.append(users_this_session)
         prior_sets = session_users[-effective_lookback - 1 : -1]
@@ -498,7 +505,7 @@ def ops_timeline(
     if end_ts:
         default_end = datetime.fromtimestamp(end_ts, tz)
 
-    rows = query_user_events(settings, int(start_dt.timestamp()), int(default_end.timestamp()))
+    rows = query_danmaku_events(settings, int(start_dt.timestamp()), int(default_end.timestamp()))
     start_ts = int(start_dt.timestamp())
     end_ts_val = int(default_end.timestamp())
 
@@ -520,7 +527,7 @@ def ops_timeline(
     def uid_key(uid, uname):
         return str(uid) if uid is not None else (uname or "")
 
-    for uid, uname, _raw_json, _gift_id, _price, ts in rows:
+    for uid, uname, _content, ts in rows:
         if ts is None:
             continue
         key = uid_key(uid, uname)
@@ -542,8 +549,8 @@ def ops_timeline(
 
         points.append({"ts": start_ts + idx * bucket_seconds, "value": value})
 
-    metric = "ONLINE_RANK_COUNT" if not cumulative else "WATCHED_CHANGE"
-    metric_label = "同时在线人数" if metric == "ONLINE_RANK_COUNT" else "累计进房人数"
+    metric = "DANMAKU_ACTIVE_USERS" if not cumulative else "DANMAKU_CUMULATIVE_USERS"
+    metric_label = "发言活跃用户数" if not cumulative else "累计发言用户数"
 
     return {
         "range": range_key,
