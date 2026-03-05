@@ -25,14 +25,6 @@ SHARE_GIFT_ID = -100
 SHARE_GIFT_NAME = "分享了直播间"
 
 
-def normalize_cmd(cmd: Any) -> str:
-    value = str(cmd or "").strip()
-    if not value:
-        return ""
-    # 某些版本会带后缀，如 INTERACT_WORD:3:0:...
-    return value.split(":", 1)[0].upper()
-
-
 def _resolve_guard_name(guard_level: int) -> str:
     return GUARD_LEVEL_NAMES.get(guard_level, "大航海")
 
@@ -178,7 +170,7 @@ def parse_send_gift(
 
 
 def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
-    cmd = normalize_cmd(event.get("cmd") or event.get("command"))
+    cmd = event.get("cmd") or event.get("command")
     if cmd != "INTERACT_WORD":
         return None
 

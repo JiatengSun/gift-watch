@@ -120,12 +120,8 @@ class CollectorService:
         3. 若所有方式均失败，抛出异常提示配置/版本问题。
         """
         bound = False
-        interact_word_bound = False
         for event_name in ("SEND_GIFT", "COMBO_SEND", "GUARD_BUY", "INTERACT_WORD"):
-            ok = self._bind(event_name, handler)
-            bound = ok or bound
-            if event_name == "INTERACT_WORD":
-                interact_word_bound = ok
+            bound = self._bind(event_name, handler) or bound
 
         # 盲盒盈亏查询等功能需要监听弹幕
         self._bind("DANMU_MSG", handler)
