@@ -250,7 +250,10 @@ class IngestPipeline:
                 self.logger.debug("检测到礼物字段但解析失败 cmd=%s event=%s", cmd, event)
             return
 
-        self._apply_gift_price(gift)
+        # GUARD_BUY 的 gift_id 是等级(1/2/3)，与普通礼物 id 可能冲突。
+        # 若套用普通礼物价格缓存会把舰长/提督/总督金额错误覆盖。
+        if cmd != "GUARD_BUY":
+            self._apply_gift_price(gift)
 
         blind_box_base = self.settings.blind_box_base_gift.strip()
         if blind_box_base and gift.gift_name.strip() == blind_box_base:
