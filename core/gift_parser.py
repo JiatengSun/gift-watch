@@ -57,7 +57,18 @@ def _iter_candidate_dicts(value: Any) -> list[dict[str, Any]]:
             continue
         seen.add(ident)
         candidates.append(current)
-        for child_key in ("data", "trigger", "trigger_data", "content"):
+        for child_key in (
+            "data",
+            "trigger",
+            "trigger_data",
+            "content",
+            "pb_decoded",
+            "payload",
+            "body",
+            "user",
+            "uinfo",
+            "base",
+        ):
             child = current.get(child_key)
             if isinstance(child, dict):
                 queue.append(child)
@@ -251,7 +262,14 @@ def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent
         msg_type = int(msg_type_raw or 0)
     except Exception:
         msg_type = 0
-    if msg_type != INTERACT_SHARE_MSG_TYPE:
+    action_raw = _pick_first_value(
+        candidates,
+        ("action", "action_type", "trigger", "event", "event_type", "interact_type"),
+    )
+    action_text = str(action_raw or "").strip().lower()
+    is_share_action = action_text in {"share", "shared", "room_share", "share_room"}
+    is_share_msg_type = msg_type == INTERACT_SHARE_MSG_TYPE
+    if not is_share_msg_type and not is_share_action:
         return None
 
     uid_raw = _pick_first_value(candidates, ("uid", "user_id"))

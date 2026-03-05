@@ -4,6 +4,7 @@ from typing import Awaitable, Callable, Any, Dict, Optional
 import logging
 import json
 import urllib.request
+import asyncio
 
 from bilibili_api import live, Credential
 
@@ -45,6 +46,8 @@ class CollectorService:
         # which raises "Invalid variable type" errors during connection.
         self.danmaku = live.LiveDanmaku(settings.room_id, credential=credential)
         self.logger = logging.getLogger(__name__)
+        self._credential = credential
+        self._bound_handler: Optional[EventHandler] = None
         self._configure_danmaku_logger()
 
     def _configure_danmaku_logger(self) -> None:
@@ -145,6 +148,12 @@ class CollectorService:
             self.logger.debug("事件监听绑定失败：%s", event_name, exc_info=exc)
             return False
 
+    def _recreate_danmaku(self) -> None:
+        """Recreate LiveDanmaku instance after unexpected disconnects."""
+
+        self.danmaku = live.LiveDanmaku(self.settings.room_id, credential=self._credential)
+        self._configure_danmaku_logger()
+
     def bind_all_handler(self, handler: EventHandler) -> None:
         """
         优先按具体礼物事件进行绑定，确保连击事件不会漏算：
@@ -155,13 +164,14 @@ class CollectorService:
            到 __ALL__，由上层自行解析 cmd，保证兼容性。
         3. 若所有方式均失败，抛出异常提示配置/版本问题。
         """
+        self._bound_handler = handler
         bound = False
         interact_word_bound = False
-        for event_name in ("SEND_GIFT", "COMBO_SEND", "GUARD_BUY", "INTERACT_WORD"):
+        for event_name in ("SEND_GIFT", "COMBO_SEND", "GUARD_BUY", "INTERACT_WORD", "INTERACT_WORD_V2"):
             current_bound = self._bind(event_name, handler)
             bound = current_bound or bound
-            if event_name == "INTERACT_WORD":
-                interact_word_bound = current_bound
+            if event_name in ("INTERACT_WORD", "INTERACT_WORD_V2"):
+                interact_word_bound = current_bound or interact_word_bound
 
         # 盲盒盈亏查询等功能需要监听弹幕
         self._bind("DANMU_MSG", handler)
@@ -181,4 +191,16 @@ class CollectorService:
         )
 
     async def run(self) -> None:
-        await self.danmaku.connect()
+        while True:
+            try:
+                await self.danmaku.connect()
+                self.logger.warning("LiveDanmaku connect() 已退出，2 秒后重建连接。")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.logger.exception("LiveDanmaku 连接循环异常，2 秒后重建连接。")
+
+            await asyncio.sleep(2)
+            self._recreate_danmaku()
+            if self._bound_handler is not None:
+                self.bind_all_handler(self._bound_handler)
