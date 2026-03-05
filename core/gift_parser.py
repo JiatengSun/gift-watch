@@ -20,6 +20,17 @@ class GiftEvent:
 GUARD_LEVEL_NAMES = {1: "总督", 2: "提督", 3: "舰长"}
 
 SUPPORTED_GIFT_CMDS = {"SEND_GIFT", "COMBO_SEND", "GUARD_BUY"}
+INTERACT_SHARE_MSG_TYPE = 3
+SHARE_GIFT_ID = -100
+SHARE_GIFT_NAME = "分享了直播间"
+
+
+def normalize_cmd(cmd: Any) -> str:
+    value = str(cmd or "").strip()
+    if not value:
+        return ""
+    # 某些版本会带后缀，如 INTERACT_WORD:3:0:...
+    return value.split(":", 1)[0].upper()
 
 
 def _resolve_guard_name(guard_level: int) -> str:
@@ -27,7 +38,7 @@ def _resolve_guard_name(guard_level: int) -> str:
 
 
 def parse_guard_buy(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
-    cmd = event.get("cmd") or event.get("command")
+    cmd = normalize_cmd(event.get("cmd") or event.get("command"))
     if cmd != "GUARD_BUY":
         return None
 
@@ -83,7 +94,7 @@ def parse_send_gift(
     event: Dict[str, Any], room_id: int, *, allow_unknown_cmd: bool = False
 ) -> Optional[GiftEvent]:
     # 兼容不同封装形态
-    cmd = event.get("cmd") or event.get("command")
+    cmd = normalize_cmd(event.get("cmd") or event.get("command"))
     if not allow_unknown_cmd and cmd not in SUPPORTED_GIFT_CMDS:
         return None
 
@@ -163,4 +174,44 @@ def parse_send_gift(
         num=num,
         total_price=total_price,
         raw_json=raw_json
+    )
+
+
+def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
+    cmd = normalize_cmd(event.get("cmd") or event.get("command"))
+    if cmd != "INTERACT_WORD":
+        return None
+
+    outer_data = event.get("data") or {}
+    inner_data = outer_data.get("data") if isinstance(outer_data, dict) else None
+    data = inner_data if isinstance(inner_data, dict) else outer_data if isinstance(outer_data, dict) else {}
+
+    try:
+        msg_type = int(data.get("msg_type") or 0)
+    except Exception:
+        msg_type = 0
+    if msg_type != INTERACT_SHARE_MSG_TYPE:
+        return None
+
+    try:
+        uid = int(data.get("uid") or 0)
+    except Exception:
+        uid = 0
+    uname = str(data.get("uname") or data.get("username") or "").strip()
+    ts = int(data.get("timestamp") or event.get("timestamp") or time.time())
+    raw_json = json.dumps(event, ensure_ascii=False)
+
+    if not uname:
+        return None
+
+    return GiftEvent(
+        ts=ts,
+        room_id=room_id,
+        uid=uid,
+        uname=uname,
+        gift_id=SHARE_GIFT_ID,
+        gift_name=SHARE_GIFT_NAME,
+        num=1,
+        total_price=0,
+        raw_json=raw_json,
     )

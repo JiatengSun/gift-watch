@@ -120,16 +120,24 @@ class CollectorService:
         3. 若所有方式均失败，抛出异常提示配置/版本问题。
         """
         bound = False
-        for event_name in ("SEND_GIFT", "COMBO_SEND", "GUARD_BUY"):
-            bound = self._bind(event_name, handler) or bound
+        interact_word_bound = False
+        for event_name in ("SEND_GIFT", "COMBO_SEND", "GUARD_BUY", "INTERACT_WORD"):
+            ok = self._bind(event_name, handler)
+            bound = ok or bound
+            if event_name == "INTERACT_WORD":
+                interact_word_bound = ok
 
         # 盲盒盈亏查询等功能需要监听弹幕
         self._bind("DANMU_MSG", handler)
 
-        if bound:
+        # 某些版本对 INTERACT_WORD 支持不稳定，额外绑定 __ALL__ 作为兜底，
+        # 避免礼物事件绑定成功但分享事件漏掉。
+        if bound and interact_word_bound:
             return
 
         if self._bind("__ALL__", handler):
+            if bound and not interact_word_bound:
+                self.logger.warning("INTERACT_WORD 绑定失败，已回退到 __ALL__ 兜底监听分享事件")
             return
 
         raise RuntimeError(
