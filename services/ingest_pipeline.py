@@ -15,7 +15,6 @@ from core.gift_parser import (
     parse_guard_buy,
     parse_send_gift,
     parse_share_event,
-    normalize_cmd,
 )
 from db.repo import insert_gift, query_blind_box_totals
 from core.rule_engine import DailyGiftCounter, GiftRule, build_rule
