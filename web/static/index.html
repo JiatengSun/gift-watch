@@ -1165,7 +1165,20 @@ const viewConfigs = {
 };
 
 const viewState = Object.fromEntries(
-  Object.keys(viewConfigs).map((k) => [k, { initialized: false, loadedAll: false, loadedShares: false, roomLoaded: false, settingsLoaded: false, latestPage: 1 }])
+  Object.keys(viewConfigs).map((k) => [
+    k,
+    {
+      initialized: false,
+      loadedAll: false,
+      loadedShares: false,
+      roomLoaded: false,
+      settingsLoaded: false,
+      latestPage: 1,
+      loadingAll: false,
+      loadingShares: false,
+      loadingRoom: false,
+    },
+  ])
 );
 
 let opsUsersCache = [];
@@ -1173,6 +1186,8 @@ let opsLeaderboardSortKey = "total_price";
 let opsTimelineRange = "today";
 const opsUsersPagination = { page: 1 };
 const opsSessionsPagination = { page: 1 };
+const AUTO_REFRESH_MS = 10000;
+let autoRefreshTimer = null;
 
 const renderSearch = (records, targets) => {
   const summary = document.getElementById(targets.summary);
@@ -2036,6 +2051,8 @@ async function loadAll(viewKey, targetPage) {
   const cfg = viewConfigs[viewKey];
   const container = document.getElementById(cfg.latest.output);
   const page = targetPage || viewState[viewKey].latestPage || 1;
+  if (viewState[viewKey].loadingAll) return;
+  viewState[viewKey].loadingAll = true;
 
   try {
     const resp = await fetch(buildUrl("/api/gifts/paged", { page, page_size: LATEST_PAGE_SIZE }));
@@ -2050,6 +2067,8 @@ async function loadAll(viewKey, targetPage) {
     if (container) {
       container.innerHTML = `<div class="empty">加载失败：${err.message || err}</div>`;
     }
+  } finally {
+    viewState[viewKey].loadingAll = false;
   }
 }
 
@@ -2057,6 +2076,8 @@ async function loadShares(viewKey) {
   const cfg = viewConfigs[viewKey];
   const container = document.getElementById(cfg?.shares?.output || "");
   if (!container) return;
+  if (viewState[viewKey].loadingShares) return;
+  viewState[viewKey].loadingShares = true;
 
   try {
     const resp = await fetch(buildUrl("/api/shares", { limit: 100 }));
@@ -2080,11 +2101,15 @@ async function loadShares(viewKey) {
   } catch (err) {
     viewState[viewKey].loadedShares = false;
     container.innerHTML = `<div class="empty">加载分享榜失败：${err.message || err}</div>`;
+  } finally {
+    viewState[viewKey].loadingShares = false;
   }
 }
 
 async function loadRoomGiftList() {
   const out = document.getElementById("roomGiftsOut");
+  if (viewState.desktop.loadingRoom) return;
+  viewState.desktop.loadingRoom = true;
   out.innerHTML = "<div class='muted'>加载中...</div>";
   try {
     const resp = await fetch(buildUrl("/api/room_gift_list"));
@@ -2107,8 +2132,34 @@ async function loadRoomGiftList() {
     viewState.desktop.roomLoaded = true;
   } catch (err) {
     out.innerHTML = `<div class="empty">加载失败：${err}</div>`;
+  } finally {
+    viewState.desktop.loadingRoom = false;
   }
 }
+
+const autoRefreshActiveView = () => {
+  const target = activeView;
+  const cfg = viewConfigs[target];
+  if (!cfg || target === "ops" || target === "console") return;
+
+  if (cfg.latest) {
+    loadAll(target, viewState[target].latestPage || 1);
+  }
+  if (cfg.shares) {
+    loadShares(target);
+  }
+  if (target === "desktop" && cfg.roomGifts) {
+    loadRoomGiftList();
+  }
+};
+
+const restartAutoRefresh = () => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  autoRefreshTimer = setInterval(autoRefreshActiveView, AUTO_REFRESH_MS);
+};
 
 const initView = (viewKey) => {
   const cfg = viewConfigs[viewKey];
@@ -2200,6 +2251,7 @@ const switchView = (target) => {
       loadConsoleRecords();
     }
   }
+  restartAutoRefresh();
 };
 
 document.querySelectorAll("[data-view-target]").forEach((btn) => {
