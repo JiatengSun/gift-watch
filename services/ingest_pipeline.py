@@ -33,7 +33,6 @@ class PendingThanks:
 
 class IngestPipeline:
     THANK_DELAY_SECONDS = 5
-    SHARE_DEDUP_SECONDS = 4
     SHARE_DEDUP_CACHE_SECONDS = 600
 
     def __init__(
@@ -56,7 +55,6 @@ class IngestPipeline:
         self._daily_counter = DailyGiftCounter()
         self._user_day_thanks: Dict[Any, int] = {}
         self._blind_box_cooldown: Dict[Any, float] = {}
-        self._share_last_seen_ts: Dict[Any, int] = {}
         self._share_exact_fingerprints: Dict[str, float] = {}
         self._danmaku_listeners: list[Callable[[dict[str, Any]], Awaitable[None]]] = []
 
@@ -141,7 +139,6 @@ class IngestPipeline:
         self._user_day_thanks = {}
         self._thanks_day = None
         self._blind_box_cooldown = {}
-        self._share_last_seen_ts = {}
         self._share_exact_fingerprints = {}
         self._refresh_sender()
 
@@ -415,19 +412,14 @@ class IngestPipeline:
         uid_part = share.uid if share.uid > 0 else 0
         uname_part = (share.uname or "").strip().lower()
         user_key = uid_part if uid_part > 0 else f"guest:{uname_part}"
-        exact_fp = f"{user_key}:{int(share.ts)}"
+        payload_fp = str(hash(share.raw_json or ""))
+        exact_fp = f"{user_key}:{int(share.ts)}:{payload_fp}"
         now = time.time()
 
         seen_at = self._share_exact_fingerprints.get(exact_fp)
         if seen_at is not None and now - seen_at <= self.SHARE_DEDUP_CACHE_SECONDS:
             return True
 
-        last_ts = self._share_last_seen_ts.get(user_key)
-        if last_ts is not None and abs(int(share.ts) - int(last_ts)) <= self.SHARE_DEDUP_SECONDS:
-            self._share_exact_fingerprints[exact_fp] = now
-            return True
-
-        self._share_last_seen_ts[user_key] = int(share.ts)
         self._share_exact_fingerprints[exact_fp] = now
 
         # Prevent unbounded memory growth during long-running sessions.
