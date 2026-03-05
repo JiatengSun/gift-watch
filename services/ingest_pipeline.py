@@ -32,6 +32,8 @@ class PendingThanks:
 
 class IngestPipeline:
     THANK_DELAY_SECONDS = 5
+    SHARE_DEDUP_SECONDS = 4
+    SHARE_DEDUP_CACHE_SECONDS = 600
 
     def __init__(
         self,
@@ -53,6 +55,8 @@ class IngestPipeline:
         self._daily_counter = DailyGiftCounter()
         self._user_day_thanks: Dict[Any, int] = {}
         self._blind_box_cooldown: Dict[Any, float] = {}
+        self._share_last_seen_ts: Dict[Any, int] = {}
+        self._share_exact_fingerprints: Dict[str, float] = {}
 
     def _coerce_event_object(self, event: Any) -> dict[str, Any] | None:
         """Convert bilibili-api event objects into plain dictionaries.
@@ -132,6 +136,8 @@ class IngestPipeline:
         self._user_day_thanks = {}
         self._thanks_day = None
         self._blind_box_cooldown = {}
+        self._share_last_seen_ts = {}
+        self._share_exact_fingerprints = {}
         self._refresh_sender()
 
     async def handle_event(self, event: Dict[str, Any]) -> None:
@@ -188,6 +194,15 @@ class IngestPipeline:
                         "收到 INTERACT_WORD 但非分享事件 msg_type=%s keys=%s",
                         data.get("msg_type"),
                         list(event.keys()),
+                    )
+                return
+            if self._is_duplicate_share(share_gift):
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    self.logger.debug(
+                        "跳过重复分享事件 uid=%s uname=%s ts=%s",
+                        share_gift.uid,
+                        share_gift.uname,
+                        share_gift.ts,
                     )
                 return
             insert_gift(self.settings, share_gift)
@@ -385,6 +400,35 @@ class IngestPipeline:
             return False
         content_lower = content.strip().lower()
         return any(t and t in content_lower for t in triggers)
+
+    def _is_duplicate_share(self, share: GiftEvent) -> bool:
+        uid_part = share.uid if share.uid > 0 else 0
+        uname_part = (share.uname or "").strip().lower()
+        user_key = uid_part if uid_part > 0 else f"guest:{uname_part}"
+        exact_fp = f"{user_key}:{int(share.ts)}"
+        now = time.time()
+
+        seen_at = self._share_exact_fingerprints.get(exact_fp)
+        if seen_at is not None and now - seen_at <= self.SHARE_DEDUP_CACHE_SECONDS:
+            return True
+
+        last_ts = self._share_last_seen_ts.get(user_key)
+        if last_ts is not None and abs(int(share.ts) - int(last_ts)) <= self.SHARE_DEDUP_SECONDS:
+            self._share_exact_fingerprints[exact_fp] = now
+            return True
+
+        self._share_last_seen_ts[user_key] = int(share.ts)
+        self._share_exact_fingerprints[exact_fp] = now
+
+        # Prevent unbounded memory growth during long-running sessions.
+        if len(self._share_exact_fingerprints) > 4096:
+            threshold = now - self.SHARE_DEDUP_CACHE_SECONDS
+            self._share_exact_fingerprints = {
+                fp: ts_seen
+                for fp, ts_seen in self._share_exact_fingerprints.items()
+                if ts_seen >= threshold
+            }
+        return False
 
     def _format_currency(self, coins: int) -> str:
         try:

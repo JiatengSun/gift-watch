@@ -42,6 +42,60 @@ def _resolve_guard_name(guard_level: int) -> str:
     return GUARD_LEVEL_NAMES.get(guard_level, "大航海")
 
 
+def _iter_candidate_dicts(value: Any) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    queue: list[Any] = [value]
+    seen: set[int] = set()
+    max_expand = 12
+
+    while queue and len(candidates) < max_expand:
+        current = queue.pop(0)
+        if not isinstance(current, dict):
+            continue
+        ident = id(current)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        candidates.append(current)
+        for child_key in ("data", "trigger", "trigger_data", "content"):
+            child = current.get(child_key)
+            if isinstance(child, dict):
+                queue.append(child)
+            elif isinstance(child, (list, tuple)):
+                for item in child:
+                    if isinstance(item, dict):
+                        queue.append(item)
+    return candidates
+
+
+def _pick_first_value(candidates: list[dict[str, Any]], keys: tuple[str, ...]) -> Any:
+    for obj in candidates:
+        for key in keys:
+            if key in obj and obj.get(key) is not None:
+                return obj.get(key)
+    return None
+
+
+def _extract_uname(candidates: list[dict[str, Any]]) -> str:
+    uname_raw = _pick_first_value(candidates, ("uname", "username", "user_name", "name"))
+    if uname_raw is not None:
+        uname = str(uname_raw).strip()
+        if uname:
+            return uname
+
+    for obj in candidates:
+        uinfo = obj.get("uinfo")
+        if not isinstance(uinfo, dict):
+            continue
+        base = uinfo.get("base")
+        if isinstance(base, dict):
+            name = str(base.get("name") or "").strip()
+            if name:
+                return name
+
+    return ""
+
+
 def parse_guard_buy(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
     cmd = normalize_cmd(event.get("cmd") or event.get("command"))
     if cmd != "GUARD_BUY":
@@ -187,13 +241,12 @@ def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent
     if cmd != "INTERACT_WORD":
         return None
 
-    outer_data = event.get("data") or {}
-    inner_data = outer_data.get("data") if isinstance(outer_data, dict) else None
-    data = inner_data if isinstance(inner_data, dict) else outer_data if isinstance(outer_data, dict) else {}
+    outer_data = event.get("data")
+    candidates = _iter_candidate_dicts(outer_data)
+    if isinstance(event, dict):
+        candidates.extend(_iter_candidate_dicts(event))
 
-    msg_type_raw = data.get("msg_type")
-    if msg_type_raw is None and isinstance(outer_data, dict):
-        msg_type_raw = outer_data.get("msg_type")
+    msg_type_raw = _pick_first_value(candidates, ("msg_type", "msgType"))
     try:
         msg_type = int(msg_type_raw or 0)
     except Exception:
@@ -201,12 +254,16 @@ def parse_share_event(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent
     if msg_type != INTERACT_SHARE_MSG_TYPE:
         return None
 
+    uid_raw = _pick_first_value(candidates, ("uid", "user_id"))
     try:
-        uid = int(data.get("uid") or 0)
+        uid = int(uid_raw or 0)
     except Exception:
         uid = 0
-    uname = str(data.get("uname") or data.get("username") or "").strip()
-    ts = int(data.get("timestamp") or event.get("timestamp") or time.time())
+    uname = _extract_uname(candidates)
+    ts_raw = _pick_first_value(candidates, ("timestamp", "trigger_time", "triggerTime"))
+    if ts_raw is None:
+        ts_raw = event.get("timestamp")
+    ts = int(ts_raw or time.time())
     raw_json = json.dumps(event, ensure_ascii=False)
 
     if not uname:
