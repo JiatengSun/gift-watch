@@ -473,7 +473,7 @@ def query_share_leaderboard(
             FROM gifts
             {where}
             GROUP BY uid, uname
-            ORDER BY share_count DESC, last_share_ts DESC
+            ORDER BY last_share_ts DESC, share_count DESC
             LIMIT ?
             """,
             (*params, limit),
