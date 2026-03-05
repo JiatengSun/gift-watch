@@ -30,7 +30,7 @@ def _resolve_guard_name(guard_level: int) -> str:
 
 
 def parse_guard_buy(event: Dict[str, Any], room_id: int) -> Optional[GiftEvent]:
-    cmd = event.get("cmd") or event.get("command")
+    cmd = normalize_cmd(event.get("cmd") or event.get("command"))
     if cmd != "GUARD_BUY":
         return None
 
@@ -86,7 +86,7 @@ def parse_send_gift(
     event: Dict[str, Any], room_id: int, *, allow_unknown_cmd: bool = False
 ) -> Optional[GiftEvent]:
     # 兼容不同封装形态
-    cmd = event.get("cmd") or event.get("command")
+    cmd = normalize_cmd(event.get("cmd") or event.get("command"))
     if not allow_unknown_cmd and cmd not in SUPPORTED_GIFT_CMDS:
         return None
 

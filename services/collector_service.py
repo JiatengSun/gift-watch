@@ -126,10 +126,14 @@ class CollectorService:
         # 盲盒盈亏查询等功能需要监听弹幕
         self._bind("DANMU_MSG", handler)
 
-        if bound:
+        # 某些版本对 INTERACT_WORD 支持不稳定，额外绑定 __ALL__ 作为兜底，
+        # 避免礼物事件绑定成功但分享事件漏掉。
+        if bound and interact_word_bound:
             return
 
         if self._bind("__ALL__", handler):
+            if bound and not interact_word_bound:
+                self.logger.warning("INTERACT_WORD 绑定失败，已回退到 __ALL__ 兜底监听分享事件")
             return
 
         raise RuntimeError(

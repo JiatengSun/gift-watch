@@ -159,9 +159,10 @@ class IngestPipeline:
                     inner_event["cmd"] = event["name"]
                 event = inner_event
 
-        cmd = event.get("cmd") or event.get("command") or event.get("type")
-        if cmd and "cmd" not in event:
-            event["cmd"] = cmd
+        raw_cmd = event.get("cmd") or event.get("command") or event.get("type")
+        cmd = normalize_cmd(raw_cmd)
+        if raw_cmd and "cmd" not in event:
+            event["cmd"] = raw_cmd
 
         coerced_data = self._coerce_event_data(event)
         if coerced_data is not None and coerced_data is not event.get("data"):
@@ -169,7 +170,7 @@ class IngestPipeline:
             event["data"] = coerced_data
             # 可能在 data 中携带更准确的命令
             if not cmd:
-                cmd = event.get("cmd") or event.get("command") or event.get("type")
+                cmd = normalize_cmd(event.get("cmd") or event.get("command") or event.get("type"))
 
         if self._is_danmaku_event(event, cmd):
             await self._handle_blind_box_query(event)
