@@ -52,6 +52,7 @@ async def main() -> None:
     # 这样即便启动时未开启，后续通过 Web 配置开启后也能生效，无需重启。
     if pipeline.sender is not None:
         scheduler = AnnouncementService(resolved_env, settings, pipeline.sender)
+        pipeline.add_danmaku_listener(scheduler.handle_danmaku_event)
         announcement_task = scheduler.start()
 
     print(f"[gift-watch] Listening room {settings.room_id} ...")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, DefaultDict, Dict, Optional
+from typing import Any, Awaitable, Callable, DefaultDict, Dict, Optional
 import logging
 import asyncio
 import time
@@ -58,6 +58,10 @@ class IngestPipeline:
         self._blind_box_cooldown: Dict[Any, float] = {}
         self._share_last_seen_ts: Dict[Any, int] = {}
         self._share_exact_fingerprints: Dict[str, float] = {}
+        self._danmaku_listeners: list[Callable[[dict[str, Any]], Awaitable[None]]] = []
+
+    def add_danmaku_listener(self, listener: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
+        self._danmaku_listeners.append(listener)
 
     def _coerce_event_object(self, event: Any) -> dict[str, Any] | None:
         """Convert bilibili-api event objects into plain dictionaries.
@@ -183,6 +187,11 @@ class IngestPipeline:
                 cmd = normalize_cmd(event.get("cmd") or event.get("command") or event.get("type"))
 
         if self._is_danmaku_event(event, cmd):
+            for listener in self._danmaku_listeners:
+                try:
+                    await listener(event)
+                except Exception:
+                    self.logger.exception("弹幕监听回调执行失败 listener=%s", getattr(listener, "__name__", type(listener).__name__))
             await self._handle_blind_box_query(event)
             return
 

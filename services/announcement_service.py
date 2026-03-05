@@ -83,9 +83,11 @@ class AnnouncementService:
             return False
         return payload["data"].get("live_status") == 1
 
-    async def _handle_danmaku_event(self, event: dict[str, Any]) -> None:
+    async def handle_danmaku_event(self, event: dict[str, Any]) -> None:
         if self._danmaku_task is None or self._danmaku_task.done():
-            return
+            # 在复用外部事件模式下，不依赖内部 danmaku 连接任务状态。
+            if self._danmaku is not None:
+                return
 
         settings = get_settings(self.env_file)
         if settings.announce_mode != "message_count" or not settings.announce_enabled:
@@ -106,6 +108,10 @@ class AnnouncementService:
         self._danmaku_count = 0
         self.logger.debug("弹幕触发计数达到阈值 %s，准备发送定时弹幕", threshold)
         await self._send_next_message(settings)
+
+    # Backward-compatible alias.
+    async def _handle_danmaku_event(self, event: dict[str, Any]) -> None:
+        await self.handle_danmaku_event(event)
 
     def _acquire_lock(self) -> bool:
         if self._lock_fd is not None:
@@ -273,7 +279,6 @@ class AnnouncementService:
                         continue
 
                     if settings.announce_mode == "message_count":
-                        await self._ensure_danmaku_listener(settings)
                         signature = (
                             "message_count",
                             max(settings.announce_danmaku_threshold, 1),
@@ -281,7 +286,7 @@ class AnnouncementService:
                         )
                         if signature != self._last_log_state:
                             self.logger.debug(
-                                "定时弹幕检查: 弹幕触发模式，阈值 %s 条，开播时发送=%s",
+                                "定时弹幕检查: 弹幕触发模式(复用采集事件)，阈值 %s 条，开播时发送=%s",
                                 signature[1],
                                 signature[2],
                             )
