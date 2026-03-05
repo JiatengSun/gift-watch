@@ -12,6 +12,26 @@ from core.bili_client import get_bot_credential
 
 EventHandler = Callable[[Dict[str, Any]], Awaitable[None]]
 
+
+class _LiveDanmakuLogFilter(logging.Filter):
+    """Rewrite opaque upstream logs into actionable messages."""
+
+    _MESSAGE_MAP = {
+        "出现错误": "直播连接收包异常，通常由服务端断开或网络抖动导致；客户端将自动重连。",
+        "非正常关闭连接": "直播连接被异常关闭，正在自动重连。",
+        "心跳响应超时": "直播连接心跳超时，正在自动重连。",
+        "无法连接服务器": "直播连接失败：所有可用主机都无法连接，请检查网络/代理/防火墙。",
+    }
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        mapped = self._MESSAGE_MAP.get(msg)
+        if mapped:
+            record.msg = mapped
+            record.args = ()
+        return True
+
+
 class CollectorService:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -25,6 +45,22 @@ class CollectorService:
         # which raises "Invalid variable type" errors during connection.
         self.danmaku = live.LiveDanmaku(settings.room_id, credential=credential)
         self.logger = logging.getLogger(__name__)
+        self._configure_danmaku_logger()
+
+    def _configure_danmaku_logger(self) -> None:
+        """Avoid duplicated upstream logs and improve readability."""
+
+        danmaku_logger = getattr(self.danmaku, "logger", None)
+        if not isinstance(danmaku_logger, logging.Logger):
+            return
+
+        # LiveDanmaku installs its own StreamHandler; prevent the same record
+        # from propagating to root and being printed twice.
+        danmaku_logger.propagate = False
+
+        has_filter = any(isinstance(f, _LiveDanmakuLogFilter) for f in danmaku_logger.filters)
+        if not has_filter:
+            danmaku_logger.addFilter(_LiveDanmakuLogFilter())
 
     async def _fetch_room_init(self) -> Optional[Dict[str, Any]]:
         """Fetch room init info with asyncio + aiohttp to avoid urllib SSL errors on Windows."""

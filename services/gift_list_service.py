@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import socket
+import urllib.error
 import urllib.request
 from typing import Any, Dict, List
 
@@ -21,11 +22,32 @@ def _fetch_payload(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
         return json.loads(raw)
-    except Exception as exc:  # pragma: no cover - network path
+    except urllib.error.HTTPError as exc:  # pragma: no cover - network path
+        if exc.code == 404:
+            logger.info("礼物清单接口不存在(HTTP 404)，将尝试备用接口：%s", url)
+        else:
+            logger.warning("礼物清单接口请求失败(HTTP %s)：%s", exc.code, url)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("礼物清单接口 HTTP 错误详情", exc_info=exc)
+        return None
+    except urllib.error.URLError as exc:  # pragma: no cover - network path
         reason = getattr(exc, "reason", None)
-        is_timeout = isinstance(reason, socket.timeout)
-        log_suffix = "(超时)" if is_timeout else ""
-        logger.warning("获取礼物清单失败%s：%s", log_suffix, url, exc_info=exc)
+        if isinstance(reason, socket.timeout):
+            logger.warning("礼物清单接口请求超时：%s", url)
+        else:
+            logger.warning("礼物清单接口网络错误：%s reason=%s", url, reason)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("礼物清单接口网络错误详情", exc_info=exc)
+        return None
+    except json.JSONDecodeError as exc:  # pragma: no cover - network path
+        logger.warning("礼物清单接口返回非 JSON 数据：%s", url)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("礼物清单 JSON 解析详情", exc_info=exc)
+        return None
+    except Exception as exc:  # pragma: no cover - network path
+        logger.warning("礼物清单接口请求异常：%s type=%s", url, type(exc).__name__)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("礼物清单接口异常详情", exc_info=exc)
         return None
 
 
