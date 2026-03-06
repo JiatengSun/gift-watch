@@ -148,11 +148,15 @@ def _spawn_background(cmd: list[str], *, log_path: Path) -> int:
         flags |= subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
     if hasattr(subprocess, "DETACHED_PROCESS"):
         flags |= subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+    child_env = os.environ.copy()
+    child_env["PYTHONUTF8"] = "1"
+    child_env["PYTHONIOENCODING"] = "utf-8"
     proc = subprocess.Popen(
         cmd,
         cwd=str(PROJECT_ROOT),
         stdout=log_fp,
         stderr=log_fp,
+        env=child_env,
         creationflags=flags,
     )
     return int(proc.pid)
@@ -164,7 +168,7 @@ def _start_collector(env_file: str) -> int:
     if running is not None:
         return running
     pid = _spawn_background(
-        [sys.executable, "-u", "collector_bot.py", "--env-file", env_file],
+        [sys.executable, "-X", "utf8", "-u", "collector_bot.py", "--env-file", env_file],
         log_path=_log_file(env_file, "collector"),
     )
     pid_path.write_text(str(pid), encoding="utf-8")
@@ -183,6 +187,8 @@ def _start_web(env_file: str) -> int:
     pid = _spawn_background(
         [
             sys.executable,
+            "-X",
+            "utf8",
             "-m",
             "uvicorn",
             "web.app:app",
