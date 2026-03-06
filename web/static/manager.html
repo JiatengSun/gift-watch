@@ -21,6 +21,19 @@
     .bad { color: #f43f5e; font-weight: 600; }
     a { color: #60a5fa; text-decoration: none; }
     .port-input { width: 92px; padding: 4px 6px; border-radius: 6px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
+    .log-box {
+      margin-top: 16px;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      background: #020617;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      height: 320px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+    select { padding: 6px 8px; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
   </style>
 </head>
 <body>
@@ -29,6 +42,8 @@
 
   <div class="row">
     <button id="btnRefresh">立即刷新</button>
+    <button id="btnStartAll">全部启动</button>
+    <button id="btnStopAll">全部停止</button>
     <button id="btnAutoRefresh">自动刷新: 开</button>
     <span id="status" class="muted"></span>
   </div>
@@ -46,6 +61,22 @@
     <tbody id="rows"></tbody>
   </table>
 
+  <h2 style="margin-top:18px;">日志查看</h2>
+  <div class="row">
+    <label>实例
+      <select id="logEnv"></select>
+    </label>
+    <label>类型
+      <select id="logRole">
+        <option value="collector">collector</option>
+        <option value="web">web</option>
+      </select>
+    </label>
+    <button id="btnLoadLog">刷新日志</button>
+    <span id="logMeta" class="muted"></span>
+  </div>
+  <div id="logBox" class="log-box"></div>
+
   <script>
     const statusEl = document.getElementById("status");
     const rowsEl = document.getElementById("rows");
@@ -53,6 +84,7 @@
     const pendingPorts = new Map();
     let autoRefreshEnabled = true;
     let isEditingPort = false;
+    let knownInstances = [];
 
     const callApi = async (path, method = "GET", body = null) => {
       const resp = await fetch(path, {
@@ -60,7 +92,14 @@
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok) {
+        let detail = `HTTP ${resp.status}`;
+        try {
+          const payload = await resp.json();
+          detail = payload?.detail || detail;
+        } catch {}
+        throw new Error(detail);
+      }
       return await resp.json();
     };
 
@@ -71,7 +110,23 @@
       return btn;
     };
 
+    const syncLogEnvSelect = (items) => {
+      const sel = document.getElementById("logEnv");
+      const previous = sel.value;
+      sel.innerHTML = "";
+      items.forEach((it) => {
+        const opt = document.createElement("option");
+        opt.value = it.env_file;
+        opt.textContent = it.env_file;
+        sel.appendChild(opt);
+      });
+      if (!items.length) return;
+      sel.value = items.some((x) => x.env_file === previous) ? previous : items[0].env_file;
+    };
+
     const render = (items) => {
+      knownInstances = items || [];
+      syncLogEnvSelect(knownInstances);
       rowsEl.innerHTML = "";
       if (!items.length) {
         const tr = document.createElement("tr");
@@ -157,15 +212,53 @@
       }
     };
 
+    const loadLog = async () => {
+      const envFile = document.getElementById("logEnv").value;
+      const role = document.getElementById("logRole").value;
+      const box = document.getElementById("logBox");
+      const meta = document.getElementById("logMeta");
+      if (!envFile) {
+        box.textContent = "暂无实例";
+        return;
+      }
+      try {
+        const data = await callApi(`/api/manager/logs?env_file=${encodeURIComponent(envFile)}&role=${encodeURIComponent(role)}&tail=300`);
+        box.textContent = data.content || "(日志为空)";
+        meta.textContent = `${data.role} ${data.running ? "运行中" : "未运行"}${data.pid ? ` PID=${data.pid}` : ""} · ${data.log_path}`;
+        box.scrollTop = box.scrollHeight;
+      } catch (err) {
+        box.textContent = `日志加载失败: ${err.message || err}`;
+      }
+    };
+
     document.getElementById("btnRefresh").addEventListener("click", refresh);
+    document.getElementById("btnStartAll").addEventListener("click", async () => {
+      try {
+        const data = await callApi("/api/manager/start_all", "POST");
+        if (data.errors?.length) {
+          alert("部分实例启动失败:\n" + data.errors.map((e) => `${e.env_file}: ${e.error}`).join("\n"));
+        }
+      } finally {
+        refresh();
+      }
+    });
+    document.getElementById("btnStopAll").addEventListener("click", async () => {
+      await callApi("/api/manager/stop_all", "POST");
+      refresh();
+    });
     autoBtn.addEventListener("click", () => {
       autoRefreshEnabled = !autoRefreshEnabled;
       autoBtn.textContent = `自动刷新: ${autoRefreshEnabled ? "开" : "关"}`;
     });
+    document.getElementById("btnLoadLog").addEventListener("click", loadLog);
+    document.getElementById("logEnv").addEventListener("change", loadLog);
+    document.getElementById("logRole").addEventListener("change", loadLog);
     refresh();
+    setTimeout(loadLog, 200);
     setInterval(() => {
       if (!autoRefreshEnabled) return;
       refresh();
+      loadLog();
     }, 5000);
   </script>
 </body>
