@@ -29,6 +29,7 @@
 
   <div class="row">
     <button id="btnRefresh">立即刷新</button>
+    <button id="btnAutoRefresh">自动刷新: 开</button>
     <span id="status" class="muted"></span>
   </div>
 
@@ -48,6 +49,10 @@
   <script>
     const statusEl = document.getElementById("status");
     const rowsEl = document.getElementById("rows");
+    const autoBtn = document.getElementById("btnAutoRefresh");
+    const pendingPorts = new Map();
+    let autoRefreshEnabled = true;
+    let isEditingPort = false;
 
     const callApi = async (path, method = "GET", body = null) => {
       const resp = await fetch(path, {
@@ -82,12 +87,15 @@
       items.forEach((it) => {
         const tr = document.createElement("tr");
         const inputId = `port-${it.env_file.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+        const pendingPort = pendingPorts.get(it.env_file);
+        const shownPort = Number.isFinite(pendingPort) ? pendingPort : it.web_port;
+        const openUrl = `${window.location.protocol}//${window.location.hostname}:${it.web_port}/`;
         tr.innerHTML = `
           <td><code>${it.env_file}</code></td>
           <td>
             <div class="row" style="margin:0;">
-              <input id="${inputId}" class="port-input" type="number" min="1" max="65535" value="${it.web_port}" />
-              <a href="${it.web_url}" target="_blank" rel="noopener">打开</a>
+              <input id="${inputId}" class="port-input" type="number" min="1" max="65535" value="${shownPort}" />
+              <a href="${openUrl}" target="_blank" rel="noopener">打开</a>
             </div>
           </td>
           <td class="${it.web_running ? "ok" : "bad"}">${it.web_running ? "运行中" : "未运行"}${it.web_pid ? ` (PID ${it.web_pid})` : ""}</td>
@@ -96,6 +104,16 @@
         `;
 
         const ops = tr.lastElementChild;
+        const portInput = tr.querySelector(`#${inputId}`);
+        portInput?.addEventListener("focus", () => { isEditingPort = true; });
+        portInput?.addEventListener("blur", () => { isEditingPort = false; });
+        portInput?.addEventListener("input", () => {
+          const v = Number(portInput.value || 0);
+          if (v >= 1 && v <= 65535) {
+            pendingPorts.set(it.env_file, v);
+          }
+        });
+
         ops.appendChild(actionBtn("启动全部", async () => {
           await callApi("/api/manager/start", "POST", { env_file: it.env_file, target: "all" });
           await refresh();
@@ -120,6 +138,7 @@
             return;
           }
           await callApi("/api/manager/set_port", "POST", { env_file: it.env_file, web_port: port });
+          pendingPorts.delete(it.env_file);
           await refresh();
         }));
         rowsEl.appendChild(tr);
@@ -127,6 +146,7 @@
     };
 
     const refresh = async () => {
+      if (isEditingPort) return;
       try {
         statusEl.textContent = "刷新中...";
         const data = await callApi("/api/manager/instances");
@@ -138,8 +158,15 @@
     };
 
     document.getElementById("btnRefresh").addEventListener("click", refresh);
+    autoBtn.addEventListener("click", () => {
+      autoRefreshEnabled = !autoRefreshEnabled;
+      autoBtn.textContent = `自动刷新: ${autoRefreshEnabled ? "开" : "关"}`;
+    });
     refresh();
-    setInterval(refresh, 5000);
+    setInterval(() => {
+      if (!autoRefreshEnabled) return;
+      refresh();
+    }, 5000);
   </script>
 </body>
 </html>
