@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from config.settings import get_settings, resolve_env_file
 from db.sqlite import init_db
 from web.routes import router
+from web.manager_routes import router as manager_router
 from services.gift_price_cache import ensure_gift_price_cache
 
 app = FastAPI(title="gift-watch")
@@ -23,6 +24,12 @@ def _startup():
     init_db(settings)
 
 app.include_router(router)
+app.include_router(manager_router)
+
+
+@app.get("/manager")
+def manager_page():
+    return FileResponse(STATIC_DIR / "manager.html")
 
 # Mount the static frontend with HTML fallback so "/" and any client-side
 # routes serve the index page instead of a 404 (e.g., when proxied by nginx).

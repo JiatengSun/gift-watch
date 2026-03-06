@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gift Watch Manager</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; margin: 20px; background: #0f172a; color: #e2e8f0; }
+    h1 { margin: 0 0 12px; }
+    .muted { color: #94a3b8; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0 16px; }
+    button {
+      border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
+      padding: 6px 10px; border-radius: 8px; cursor: pointer;
+    }
+    button:hover { background: #334155; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border-bottom: 1px solid #334155; padding: 8px; text-align: left; font-size: 14px; }
+    th { color: #93c5fd; font-weight: 600; }
+    .ok { color: #22c55e; font-weight: 600; }
+    .bad { color: #f43f5e; font-weight: 600; }
+    a { color: #60a5fa; text-decoration: none; }
+    .port-input { width: 92px; padding: 4px 6px; border-radius: 6px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <h1>实例管理</h1>
+  <div class="muted">自动扫描 <code>.env-*</code>，支持前后端一键启停，5 秒自动刷新</div>
+
+  <div class="row">
+    <button id="btnRefresh">立即刷新</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Env</th>
+        <th>前端端口</th>
+        <th>前端状态</th>
+        <th>后端状态</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const rowsEl = document.getElementById("rows");
+
+    const callApi = async (path, method = "GET", body = null) => {
+      const resp = await fetch(path, {
+        method,
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    };
+
+    const actionBtn = (label, onClick) => {
+      const btn = document.createElement("button");
+      btn.textContent = label;
+      btn.addEventListener("click", onClick);
+      return btn;
+    };
+
+    const render = (items) => {
+      rowsEl.innerHTML = "";
+      if (!items.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.className = "muted";
+        td.textContent = "未发现 .env-* 文件";
+        tr.appendChild(td);
+        rowsEl.appendChild(tr);
+        return;
+      }
+
+      items.forEach((it) => {
+        const tr = document.createElement("tr");
+        const inputId = `port-${it.env_file.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+        tr.innerHTML = `
+          <td><code>${it.env_file}</code></td>
+          <td>
+            <div class="row" style="margin:0;">
+              <input id="${inputId}" class="port-input" type="number" min="1" max="65535" value="${it.web_port}" />
+              <a href="${it.web_url}" target="_blank" rel="noopener">打开</a>
+            </div>
+          </td>
+          <td class="${it.web_running ? "ok" : "bad"}">${it.web_running ? "运行中" : "未运行"}${it.web_pid ? ` (PID ${it.web_pid})` : ""}</td>
+          <td class="${it.collector_running ? "ok" : "bad"}">${it.collector_running ? "运行中" : "未运行"}${it.collector_pid ? ` (PID ${it.collector_pid})` : ""}</td>
+          <td></td>
+        `;
+
+        const ops = tr.lastElementChild;
+        ops.appendChild(actionBtn("启动全部", async () => {
+          await callApi("/api/manager/start", "POST", { env_file: it.env_file, target: "all" });
+          await refresh();
+        }));
+        ops.appendChild(actionBtn("停全部", async () => {
+          await callApi("/api/manager/stop", "POST", { env_file: it.env_file, target: "all" });
+          await refresh();
+        }));
+        ops.appendChild(actionBtn("启动前端", async () => {
+          await callApi("/api/manager/start", "POST", { env_file: it.env_file, target: "web" });
+          await refresh();
+        }));
+        ops.appendChild(actionBtn("启动后端", async () => {
+          await callApi("/api/manager/start", "POST", { env_file: it.env_file, target: "collector" });
+          await refresh();
+        }));
+        ops.appendChild(actionBtn("保存端口", async () => {
+          const input = document.getElementById(inputId);
+          const port = Number(input?.value || 0);
+          if (!port || port < 1 || port > 65535) {
+            alert("请输入有效端口(1-65535)");
+            return;
+          }
+          await callApi("/api/manager/set_port", "POST", { env_file: it.env_file, web_port: port });
+          await refresh();
+        }));
+        rowsEl.appendChild(tr);
+      });
+    };
+
+    const refresh = async () => {
+      try {
+        statusEl.textContent = "刷新中...";
+        const data = await callApi("/api/manager/instances");
+        render(data);
+        statusEl.textContent = `最近刷新: ${new Date().toLocaleTimeString()}`;
+      } catch (err) {
+        statusEl.textContent = `刷新失败: ${err.message || err}`;
+      }
+    };
+
+    document.getElementById("btnRefresh").addEventListener("click", refresh);
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
