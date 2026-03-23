@@ -52,6 +52,8 @@ copy .env.example .env
 - `DANMAKU_QUEUE_ENABLED`：是否启用持久化弹幕队列（默认 1），多实例/多端口可共用同一队列。
 - `DANMAKU_QUEUE_INTERVAL_SEC`：全局弹幕发送间隔（默认 3s）。
 - `DANMAKU_QUEUE_DB_PATH`：队列数据库路径（默认与 `DB_PATH` 相同）。
+- `RAW_EVENT_STORAGE_MODE`：事件原始载荷存储模式，支持 `full` / `compact` / `none`，默认 `compact`。`compact` 会只保留兼容分析所需的精简 JSON，显著降低数据库增长速度。
+- `COMPACT_LEGACY_PAYLOADS_ON_STARTUP`：是否在启动时自动把历史 `raw_json` 瘦身并执行一次 `VACUUM`，默认 `1`。首次升级后启动可能会慢一些，但完成后数据库体积会下降，且老数据无需清库。
 
 盲盒盈亏查询可在控制台配置，也可以按需调整以下环境变量：
 - `BLIND_BOX_ENABLED`：是否开启弹幕查询（默认 1）。

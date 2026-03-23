@@ -48,3 +48,8 @@ CREATE TABLE IF NOT EXISTS danmaku_events (
 
 CREATE INDEX IF NOT EXISTS idx_danmaku_events_room_ts ON danmaku_events(room_id, ts);
 CREATE INDEX IF NOT EXISTS idx_danmaku_events_room_uid_ts ON danmaku_events(room_id, uid, ts);
+
+CREATE TABLE IF NOT EXISTS app_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);

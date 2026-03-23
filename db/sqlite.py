@@ -4,6 +4,11 @@ import sqlite3
 from pathlib import Path
 
 from config.settings import Settings
+from db.event_storage import (
+    build_danmaku_payload,
+    build_gift_payload,
+    compact_json_text,
+)
 
 
 def _debug_log(message: str) -> None:
@@ -336,6 +341,154 @@ def _guarantee_gifts_room_id(conn: sqlite3.Connection) -> bool:
     return "room_id" in cols
 
 
+def _ensure_app_meta(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_meta (
+          key TEXT PRIMARY KEY,
+          value TEXT
+        )
+        """
+    )
+
+
+def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
+    if not row:
+        return None
+    return str(row[0]) if row[0] is not None else None
+
+
+def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO app_meta(key, value)
+        VALUES(?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key, value),
+    )
+
+
+def _compact_gifts_payloads(conn: sqlite3.Connection, batch_size: int = 500) -> int:
+    if not _table_exists(conn, "gifts") or "raw_json" not in _column_names(conn, "gifts"):
+        return 0
+
+    updated = 0
+    last_id = 0
+    while True:
+        rows = conn.execute(
+            """
+            SELECT id, ts, room_id, uid, uname, gift_id, gift_name, num, total_price, raw_json
+            FROM gifts
+            WHERE id > ? AND raw_json IS NOT NULL AND raw_json != ''
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (last_id, batch_size),
+        ).fetchall()
+        if not rows:
+            break
+
+        payload_updates: list[tuple[str, int]] = []
+        for row in rows:
+            last_id = int(row[0])
+            compact_payload = build_gift_payload(
+                ts=int(row[1] or 0),
+                room_id=int(row[2] or 0),
+                uid=row[3],
+                uname=str(row[4] or ""),
+                gift_id=row[5],
+                gift_name=str(row[6] or ""),
+                num=int(row[7] or 0),
+                total_price=int(row[8] or 0),
+            )
+            next_payload = compact_json_text(row[9], compact_payload)
+            if next_payload != row[9]:
+                payload_updates.append((next_payload, int(row[0])))
+
+        if payload_updates:
+            conn.executemany("UPDATE gifts SET raw_json = ? WHERE id = ?", payload_updates)
+            updated += len(payload_updates)
+            conn.commit()
+
+    return updated
+
+
+def _compact_danmaku_payloads(conn: sqlite3.Connection, batch_size: int = 500) -> int:
+    if not _table_exists(conn, "danmaku_events") or "raw_json" not in _column_names(conn, "danmaku_events"):
+        return 0
+
+    updated = 0
+    last_id = 0
+    while True:
+        rows = conn.execute(
+            """
+            SELECT id, ts, room_id, uid, uname, content, raw_json
+            FROM danmaku_events
+            WHERE id > ? AND raw_json IS NOT NULL AND raw_json != ''
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (last_id, batch_size),
+        ).fetchall()
+        if not rows:
+            break
+
+        payload_updates: list[tuple[str, int]] = []
+        for row in rows:
+            last_id = int(row[0])
+            compact_payload = build_danmaku_payload(
+                ts=int(row[1] or 0),
+                room_id=int(row[2] or 0),
+                uid=row[3],
+                uname=str(row[4] or ""),
+                content=str(row[5] or ""),
+            )
+            next_payload = compact_json_text(row[6], compact_payload)
+            if next_payload != row[6]:
+                payload_updates.append((next_payload, int(row[0])))
+
+        if payload_updates:
+            conn.executemany(
+                "UPDATE danmaku_events SET raw_json = ? WHERE id = ?",
+                payload_updates,
+            )
+            updated += len(payload_updates)
+            conn.commit()
+
+    return updated
+
+
+def _compact_legacy_payloads(conn: sqlite3.Connection, settings: Settings) -> None:
+    if not settings.compact_legacy_payloads_on_startup:
+        return
+
+    if settings.raw_event_storage_mode == "full":
+        return
+
+    _ensure_app_meta(conn)
+    compaction_key = "payload_compaction_v1"
+    if _get_meta(conn, compaction_key) == "done":
+        return
+
+    _debug_log("starting payload compaction for legacy gifts/danmaku rows")
+    gifts_updated = _compact_gifts_payloads(conn)
+    danmaku_updated = _compact_danmaku_payloads(conn)
+    _set_meta(conn, compaction_key, "done")
+    conn.commit()
+
+    if gifts_updated or danmaku_updated:
+        _debug_log(
+            f"payload compaction updated gifts={gifts_updated} danmaku_events={danmaku_updated}; vacuuming database"
+        )
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("VACUUM")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    else:
+        _debug_log("payload compaction found no rows to rewrite")
+
+
 def init_db(settings: Settings) -> None:
     schema_path = Path(__file__).with_name("schema.sql")
     schema_sql = schema_path.read_text(encoding="utf-8")
@@ -346,6 +499,7 @@ def init_db(settings: Settings) -> None:
         _guarantee_gifts_room_id(conn)
         _ensure_queue_room_id(conn)
         _ensure_queue_meta_room_id(conn)
+        _ensure_app_meta(conn)
         conn.commit()
 
         statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
@@ -373,3 +527,5 @@ def init_db(settings: Settings) -> None:
                             f"{sorted(_column_names(conn, 'gifts'))}"
                         )
                     raise
+
+        _compact_legacy_payloads(conn, settings)

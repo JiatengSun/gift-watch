@@ -70,6 +70,8 @@ class Settings:
     bot_buvid3: str
 
     db_path: str
+    raw_event_storage_mode: str
+    compact_legacy_payloads_on_startup: bool
 
     thank_global_cooldown_sec: int
     thank_per_user_cooldown_sec: int
@@ -125,6 +127,12 @@ def get_settings(env_file: str | None = None) -> Settings:
     target_gifts = _split_csv(_get_env("TARGET_GIFTS", "人气票", env))
     target_gift_ids = _split_csv_ints(_get_env("TARGET_GIFT_IDS", "", env))
     target_min_num = int(_get_env("TARGET_MIN_NUM", "50", env))
+    raw_event_storage_mode = _get_env("RAW_EVENT_STORAGE_MODE", "compact", env).strip().lower()
+    if raw_event_storage_mode not in {"full", "compact", "none"}:
+        raw_event_storage_mode = "compact"
+    compact_legacy_payloads_on_startup = _get_env(
+        "COMPACT_LEGACY_PAYLOADS_ON_STARTUP", "1", env
+    ) == "1"
 
     def _get_log_level() -> int:
         level_name = _get_env("LOG_LEVEL", "INFO", env).strip().upper()
@@ -234,6 +242,8 @@ def get_settings(env_file: str | None = None) -> Settings:
         bot_buvid3=_get_env("BOT_BUVID3", "", env),
 
         db_path=_get_env("DB_PATH", "gifts.db", env),
+        raw_event_storage_mode=raw_event_storage_mode,
+        compact_legacy_payloads_on_startup=compact_legacy_payloads_on_startup,
 
         thank_global_cooldown_sec=int(_get_env("THANK_GLOBAL_COOLDOWN_SEC", "10", env)),
         thank_per_user_cooldown_sec=int(_get_env("THANK_PER_USER_COOLDOWN_SEC", "60", env)),

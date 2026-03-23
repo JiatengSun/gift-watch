@@ -5,19 +5,48 @@ import logging
 
 from config.settings import Settings
 from core.gift_parser import GiftEvent, GUARD_LEVEL_NAMES
+from db.event_storage import (
+    build_danmaku_payload,
+    build_gift_payload,
+    normalize_payload,
+)
 from db.sqlite import get_conn
 
 logger = logging.getLogger(__name__)
 
 
 def insert_gift(settings: Settings, gift: GiftEvent) -> None:
+    stored_payload = normalize_payload(
+        mode=settings.raw_event_storage_mode,
+        fallback_payload=gift.raw_json,
+        compact_payload=build_gift_payload(
+            ts=gift.ts,
+            room_id=gift.room_id,
+            uid=gift.uid,
+            uname=gift.uname,
+            gift_id=gift.gift_id,
+            gift_name=gift.gift_name,
+            num=gift.num,
+            total_price=gift.total_price,
+        ),
+    )
     with get_conn(settings) as conn:
         conn.execute(
             """
             INSERT INTO gifts(ts, room_id, uid, uname, gift_id, gift_name, num, total_price, raw_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (gift.ts, gift.room_id, gift.uid, gift.uname, gift.gift_id, gift.gift_name, gift.num, gift.total_price, gift.raw_json),
+            (
+                gift.ts,
+                gift.room_id,
+                gift.uid,
+                gift.uname,
+                gift.gift_id,
+                gift.gift_name,
+                gift.num,
+                gift.total_price,
+                stored_payload,
+            ),
         )
 
 
@@ -30,13 +59,24 @@ def insert_danmaku_event(
     content: str,
     raw_json: str,
 ) -> None:
+    stored_payload = normalize_payload(
+        mode=settings.raw_event_storage_mode,
+        fallback_payload=raw_json,
+        compact_payload=build_danmaku_payload(
+            ts=ts,
+            room_id=settings.room_id,
+            uid=uid,
+            uname=uname,
+            content=content,
+        ),
+    )
     with get_conn(settings) as conn:
         conn.execute(
             """
             INSERT INTO danmaku_events(ts, room_id, uid, uname, content, raw_json)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (ts, settings.room_id, uid, uname, content, raw_json),
+            (ts, settings.room_id, uid, uname, content, stored_payload),
         )
 
 
