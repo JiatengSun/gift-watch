@@ -155,7 +155,7 @@
         const inputId = `port-${it.env_file.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
         const pendingPort = pendingPorts.get(it.env_file);
         const shownPort = Number.isFinite(pendingPort) ? pendingPort : it.web_port;
-        const openUrl = `${window.location.protocol}//${window.location.hostname}:${it.web_port}${BASE_PATH || "/gift-watch"}/`;
+        const openUrl = `${window.location.origin}${withBase(`/app?env=${encodeURIComponent(it.env_file)}`)}`;
         tr.innerHTML = `
           <td><code>${it.env_file}</code></td>
           <td>
