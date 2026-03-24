@@ -1019,9 +1019,14 @@ const detectBasePath = () => {
 };
 
 const BASE_PATH = detectBasePath();
+const PAGE_QUERY = new URLSearchParams(window.location.search || "");
+const BOUND_ENV = (PAGE_QUERY.get("env") || "").trim();
 
 const buildUrl = (path, params) => {
   const searchParams = params instanceof URLSearchParams ? params : new URLSearchParams(params || {});
+  if (BOUND_ENV && !searchParams.has("env")) {
+    searchParams.set("env", BOUND_ENV);
+  }
   const qs = searchParams.toString();
   const target = `${BASE_PATH}${path}`;
   return qs ? `${target}?${qs}` : target;
