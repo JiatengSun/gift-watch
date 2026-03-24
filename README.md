@@ -121,6 +121,34 @@ PORTAL_PASSWORD=该主播的专属密码
 - 公开主页只需要把入口指向 `gift-watch.cara4lyfe.top/access`
 - 主播登录后只会看到自己绑定的 `.env-*` 数据；管理员密码会进入管理页
 
+### 6) 统一 Web 门户启动（推荐 Ubuntu）
+
+如果你想放弃“每个主播一个网页端口”的模式，只保留一个统一入口，推荐只启动一个 Web 门户实例，例如 `9999`：
+
+```bash
+cd /home/tencentCloud/gift-watch
+bash ./scripts/start_web_portal.sh .env-lqx 9999
+```
+
+然后访问：
+
+```text
+http://你的公网IP:9999/access
+```
+
+停止：
+
+```bash
+cd /home/tencentCloud/gift-watch
+bash ./scripts/stop_web_portal.sh .env-lqx 9999
+```
+
+说明：
+
+- 这个统一入口实例会读取所有 `.env-*` 里的 `PORTAL_PASSWORD`
+- 主播输入自己的密码后，会在同一个 Web 门户里看到自己绑定的数据
+- 你只需要保留一个对外开放的 Web 端口，例如 `9999`
+
 ## 目录结构
 ```
 gift-watch/
