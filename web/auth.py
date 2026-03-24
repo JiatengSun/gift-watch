@@ -11,11 +11,10 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import dotenv_values
-from fastapi import HTTPException, Request, Response
-from web.pathing import get_base_path
+from fastapi import HTTPException, Request
 
-COOKIE_NAME = "gift_watch_portal"
-COOKIE_MAX_AGE_SEC = 60 * 60 * 12
+TICKET_PARAM = "ticket"
+TICKET_MAX_AGE_SEC = 60 * 60 * 12
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -63,7 +62,7 @@ def create_session_token(session: PortalSession) -> str:
     payload = {
         "role": session.role,
         "env_file": session.env_file,
-        "exp": int(time.time()) + COOKIE_MAX_AGE_SEC,
+        "exp": int(time.time()) + TICKET_MAX_AGE_SEC,
     }
     encoded = _encode_payload(payload)
     return f"{encoded}.{_sign(encoded)}"
@@ -96,32 +95,10 @@ def parse_session_token(token: str | None) -> PortalSession | None:
     return None
 
 
-def attach_session_cookie(response: Response, request: Request, session: PortalSession) -> None:
-    cookie_path = get_base_path() or "/"
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=create_session_token(session),
-        max_age=COOKIE_MAX_AGE_SEC,
-        httponly=True,
-        samesite="lax",
-        secure=_is_https_request(request),
-        path=cookie_path,
-    )
-
-
-def clear_session_cookie(response: Response, request: Request) -> None:
-    cookie_path = get_base_path() or "/"
-    response.delete_cookie(
-        key=COOKIE_NAME,
-        httponly=True,
-        samesite="lax",
-        secure=_is_https_request(request),
-        path=cookie_path,
-    )
-
-
 def get_current_session(request: Request) -> PortalSession | None:
-    token = request.cookies.get(COOKIE_NAME)
+    token = (request.query_params.get(TICKET_PARAM) or "").strip()
+    if not token:
+        token = (request.headers.get("x-access-ticket") or "").strip()
     return parse_session_token(token)
 
 

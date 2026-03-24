@@ -1021,11 +1021,15 @@ const detectBasePath = () => {
 const BASE_PATH = detectBasePath();
 const PAGE_QUERY = new URLSearchParams(window.location.search || "");
 const BOUND_ENV = (PAGE_QUERY.get("env") || "").trim();
+const ACTIVE_TICKET = (PAGE_QUERY.get("ticket") || "").trim();
 
 const buildUrl = (path, params) => {
   const searchParams = params instanceof URLSearchParams ? params : new URLSearchParams(params || {});
   if (BOUND_ENV && !searchParams.has("env")) {
     searchParams.set("env", BOUND_ENV);
+  }
+  if (ACTIVE_TICKET && !searchParams.has("ticket")) {
+    searchParams.set("ticket", ACTIVE_TICKET);
   }
   const qs = searchParams.toString();
   const target = `${BASE_PATH}${path}`;
@@ -2297,7 +2301,6 @@ document.querySelectorAll("[data-range]").forEach((btn) => {
 });
 
 document.getElementById("btnLogout")?.addEventListener("click", async () => {
-  await fetch(buildUrl("/api/access/logout"), { method: "POST" });
   window.location.href = `${BASE_PATH}/access`;
 });
 

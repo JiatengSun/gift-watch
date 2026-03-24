@@ -126,6 +126,7 @@
     const BASE_PATH = detectBasePath();
     const withBase = (path) => `${BASE_PATH}${path}`;
 
+    const TICKET_PARAM = "ticket";
     const form = document.getElementById("loginForm");
     const input = document.getElementById("passwordInput");
     const statusEl = document.getElementById("status");
@@ -134,17 +135,6 @@
     const setStatus = (message, kind = "") => {
       statusEl.textContent = message || "";
       statusEl.className = `status ${kind}`.trim();
-    };
-
-    const redirectIfLoggedIn = async () => {
-      try {
-        const resp = await fetch(withBase("/api/access/session"), { credentials: "same-origin" });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if (data?.authenticated && data?.destination) {
-          window.location.href = data.destination;
-        }
-      } catch {}
     };
 
     form.addEventListener("submit", async (event) => {
@@ -170,15 +160,21 @@
           throw new Error(data?.detail || `HTTP ${resp.status}`);
         }
         setStatus("验证成功，正在跳转...", "success");
-        window.location.href = data.destination || withBase("/app");
+        if (data?.destination) {
+          window.location.href = data.destination;
+          return;
+        }
+        if (data?.ticket) {
+          window.location.href = `${withBase("/app")}?${TICKET_PARAM}=${encodeURIComponent(data.ticket)}`;
+          return;
+        }
+        window.location.href = withBase("/app");
       } catch (err) {
         setStatus(err.message || String(err), "error");
       } finally {
         submitBtn.disabled = false;
       }
     });
-
-    redirectIfLoggedIn();
   </script>
 </body>
 </html>

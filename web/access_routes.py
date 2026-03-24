@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Request, Response
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from web.auth import (
-    attach_session_cookie,
-    clear_session_cookie,
+    TICKET_PARAM,
+    create_session_token,
     get_current_session,
     resolve_password_session,
 )
@@ -48,7 +48,6 @@ def access_session(request: Request):
 @router.post("/api/access/login")
 def access_login(
     request: Request,
-    response: Response,
     payload: LoginPayload = Body(...),
 ):
     session = resolve_password_session(payload.password)
@@ -58,15 +57,16 @@ def access_login(
             status_code=401,
         )
 
-    attach_session_cookie(response, request, session)
+    ticket = create_session_token(session)
+    destination_path = with_base_path("/manager" if session.role == "manager" else "/app")
     return {
         "ok": True,
         "role": session.role,
-        "destination": _destination_for_role(session.role),
+        "ticket": ticket,
+        "destination": f"{destination_path}?{TICKET_PARAM}={ticket}",
     }
 
 
 @router.post("/api/access/logout")
-def access_logout(request: Request, response: Response):
-    clear_session_cookie(response, request)
+def access_logout():
     return {"ok": True}

@@ -88,6 +88,19 @@
     };
     const BASE_PATH = detectBasePath();
     const withBase = (path) => `${BASE_PATH}${path}`;
+    const PAGE_QUERY = new URLSearchParams(window.location.search || "");
+    const ACTIVE_TICKET = (PAGE_QUERY.get("ticket") || "").trim();
+
+    const withTicket = (path) => {
+      const normalized = path || "/";
+      const [pathname, rawQuery = ""] = normalized.split("?", 2);
+      const searchParams = new URLSearchParams(rawQuery);
+      if (ACTIVE_TICKET && !searchParams.has("ticket")) {
+        searchParams.set("ticket", ACTIVE_TICKET);
+      }
+      const qs = searchParams.toString();
+      return withBase(qs ? `${pathname}?${qs}` : pathname);
+    };
 
     const statusEl = document.getElementById("status");
     const rowsEl = document.getElementById("rows");
@@ -98,7 +111,7 @@
     let knownInstances = [];
 
     const callApi = async (path, method = "GET", body = null) => {
-      const resp = await fetch(withBase(path), {
+      const resp = await fetch(withTicket(path), {
         method,
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
@@ -155,7 +168,7 @@
         const inputId = `port-${it.env_file.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
         const pendingPort = pendingPorts.get(it.env_file);
         const shownPort = Number.isFinite(pendingPort) ? pendingPort : it.web_port;
-        const openUrl = `${window.location.origin}${withBase(`/app?env=${encodeURIComponent(it.env_file)}`)}`;
+        const openUrl = `${window.location.origin}${withTicket(`/app?env=${encodeURIComponent(it.env_file)}`)}`;
         tr.innerHTML = `
           <td><code>${it.env_file}</code></td>
           <td>
@@ -244,7 +257,6 @@
 
     document.getElementById("btnRefresh").addEventListener("click", refresh);
     document.getElementById("btnLogout").addEventListener("click", async () => {
-      await fetch(withBase("/api/access/logout"), { method: "POST" });
       window.location.href = withBase("/access");
     });
     document.getElementById("btnStartAll").addEventListener("click", async () => {
