@@ -44,6 +44,7 @@
     <button id="btnRefresh">立即刷新</button>
     <button id="btnStartAll">全部启动</button>
     <button id="btnStopAll">全部停止</button>
+    <button id="btnLogout">退出管理员</button>
     <button id="btnAutoRefresh">自动刷新: 开</button>
     <span id="status" class="muted"></span>
   </div>
@@ -232,6 +233,10 @@
     };
 
     document.getElementById("btnRefresh").addEventListener("click", refresh);
+    document.getElementById("btnLogout").addEventListener("click", async () => {
+      await fetch("/api/access/logout", { method: "POST" });
+      window.location.href = "/access";
+    });
     document.getElementById("btnStartAll").addEventListener("click", async () => {
       try {
         const data = await callApi("/api/manager/start_all", "POST");

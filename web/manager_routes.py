@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import dotenv_values
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from config.env_store import save_env
+from web.auth import require_manager_session
 
 router = APIRouter()
 
@@ -244,7 +245,8 @@ def _scan_env_files() -> list[str]:
 
 
 @router.get("/api/manager/instances")
-def manager_instances() -> list[dict[str, Any]]:
+def manager_instances(request: Request) -> list[dict[str, Any]]:
+    require_manager_session(request)
     _ensure_dirs()
     out: list[dict[str, Any]] = []
     for env_file in _scan_env_files():
@@ -268,7 +270,8 @@ def manager_instances() -> list[dict[str, Any]]:
 
 
 @router.post("/api/manager/start")
-def manager_start(payload: InstanceAction) -> dict[str, Any]:
+def manager_start(request: Request, payload: InstanceAction) -> dict[str, Any]:
+    require_manager_session(request)
     env_file = payload.env_file.strip()
     if not env_file:
         raise HTTPException(status_code=400, detail="env_file required")
@@ -291,7 +294,8 @@ def manager_start(payload: InstanceAction) -> dict[str, Any]:
 
 
 @router.post("/api/manager/stop")
-def manager_stop(payload: InstanceAction) -> dict[str, Any]:
+def manager_stop(request: Request, payload: InstanceAction) -> dict[str, Any]:
+    require_manager_session(request)
     env_file = payload.env_file.strip()
     if not env_file:
         raise HTTPException(status_code=400, detail="env_file required")
@@ -308,7 +312,8 @@ def manager_stop(payload: InstanceAction) -> dict[str, Any]:
 
 
 @router.post("/api/manager/set_port")
-def manager_set_port(payload: PortUpdateAction) -> dict[str, Any]:
+def manager_set_port(request: Request, payload: PortUpdateAction) -> dict[str, Any]:
+    require_manager_session(request)
     env_file = payload.env_file.strip()
     if not env_file:
         raise HTTPException(status_code=400, detail="env_file required")
@@ -329,7 +334,8 @@ def manager_set_port(payload: PortUpdateAction) -> dict[str, Any]:
 
 
 @router.post("/api/manager/start_all")
-def manager_start_all() -> dict[str, Any]:
+def manager_start_all(request: Request) -> dict[str, Any]:
+    require_manager_session(request)
     env_files = _scan_env_files()
     started: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -345,7 +351,8 @@ def manager_start_all() -> dict[str, Any]:
 
 
 @router.post("/api/manager/stop_all")
-def manager_stop_all() -> dict[str, Any]:
+def manager_stop_all(request: Request) -> dict[str, Any]:
+    require_manager_session(request)
     env_files = _scan_env_files()
     for env_file in env_files:
         _stop_role(env_file, "collector")
@@ -355,10 +362,12 @@ def manager_stop_all() -> dict[str, Any]:
 
 @router.get("/api/manager/logs")
 def manager_logs(
+    request: Request,
     env_file: str = Query(..., description="Env file name, e.g. .env-lqx"),
     role: str = Query("collector", description="collector|web"),
     tail: int = Query(200, ge=10, le=5000),
 ) -> dict[str, Any]:
+    require_manager_session(request)
     role = role.strip().lower()
     if role not in {"collector", "web"}:
         raise HTTPException(status_code=400, detail="role must be collector|web")

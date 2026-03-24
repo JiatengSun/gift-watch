@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta
 import json
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from zoneinfo import ZoneInfo
 
@@ -24,13 +24,22 @@ from db.repo import (
     query_share_leaderboard,
 )
 from services.gift_list_service import fetch_room_gift_list
+from db.sqlite import init_db
+from web.auth import resolve_allowed_env
 
 router = APIRouter()
 
 
-def _resolve_env(env: str | None) -> str | None:
+def _resolve_env(request: Request, env: str | None) -> str | None:
     effective = (env or "").strip()
-    return resolve_env_file(effective or DEFAULT_ENV_FILE)
+    resolved = resolve_env_file(effective or DEFAULT_ENV_FILE)
+    return resolve_allowed_env(request, resolved)
+
+
+def _settings_for_request(request: Request, env: str | None) -> Settings:
+    settings = get_settings(_resolve_env(request, env))
+    init_db(settings)
+    return settings
 
 
 class ThankTemplatesPayload(BaseModel):
@@ -170,6 +179,7 @@ def _extract_message_length(raw_json: str) -> int:
 
 @router.get("/api/search")
 def search(
+    request: Request,
     uname: str = Query(..., description="用户名"),
     gift_name: str | None = Query(None, description="礼物名"),
     guard_level: int | None = Query(None, ge=1, le=3, description="大航海等级：1=总督 2=提督 3=舰长"),
@@ -177,7 +187,7 @@ def search(
     start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     now = datetime.now()
     effective_start_ts = start_ts if start_ts is not None else _default_start_ts(now)
     end_ts = int(now.timestamp())
@@ -215,12 +225,13 @@ def search(
 
 @router.get("/api/shares")
 def list_shares(
+    request: Request,
     limit: int = Query(100, ge=1, le=1000),
     start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
     end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     rows = query_share_leaderboard(
         settings,
         start_ts=start_ts,
@@ -242,6 +253,7 @@ def list_shares(
 
 @router.get("/api/gifts")
 def list_gifts(
+    request: Request,
     limit: int = Query(200, ge=1, le=1000),
     start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
     end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
@@ -250,7 +262,7 @@ def list_gifts(
     guard_level: int | None = Query(None, ge=1, le=3, description="大航海等级：1=总督 2=提督 3=舰长"),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     rows = query_recent_gifts(
         settings,
         limit=limit,
@@ -277,6 +289,7 @@ def list_gifts(
 
 @router.get("/api/gifts/paged")
 def list_gifts_paginated(
+    request: Request,
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(50, ge=1, le=500, description="每页条数"),
     start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
@@ -286,7 +299,7 @@ def list_gifts_paginated(
     guard_level: int | None = Query(None, ge=1, le=3, description="大航海等级：1=总督 2=提督 3=舰长"),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     total, rows = query_recent_gifts_paginated(
         settings,
         page=page,
@@ -318,8 +331,12 @@ def list_gifts_paginated(
 
 
 @router.get("/api/gifts/{gift_id}")
-def get_gift(gift_id: int, env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端")):
-    settings = get_settings(_resolve_env(env))
+def get_gift(
+    request: Request,
+    gift_id: int,
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
+):
+    settings = _settings_for_request(request, env)
     row = query_gift_by_id(settings, gift_id)
     if not row:
         raise HTTPException(status_code=404, detail="记录不存在")
@@ -336,8 +353,12 @@ def get_gift(gift_id: int, env: str | None = Query(None, description="可选 .en
 
 
 @router.delete("/api/gifts/{gift_id}")
-def delete_gift(gift_id: int, env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端")):
-    settings = get_settings(_resolve_env(env))
+def delete_gift(
+    request: Request,
+    gift_id: int,
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
+):
+    settings = _settings_for_request(request, env)
     deleted = delete_gift_by_id(settings, gift_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="记录不存在或已删除")
@@ -346,12 +367,13 @@ def delete_gift(gift_id: int, env: str | None = Query(None, description="可选 
 
 @router.get("/api/ops/engagement")
 def engagement_panel(
+    request: Request,
     session_count: int = Query(6, ge=1, le=30, description="需要统计的场次数"),
     lookback: int = Query(3, ge=1, le=30, description="老观众需要连续出现的场次"),
     end_ts: int | None = Query(None, description="最近一场的结束时间（Unix 秒），默认当前时间"),
     env: str | None = Query(None, description="可选 .env 文件路径"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     tz = ZoneInfo("Asia/Shanghai")
     now = datetime.now(tz)
     anchor_end = datetime.fromtimestamp(end_ts, tz) if end_ts else now
@@ -494,11 +516,12 @@ def _normalize_time_range(range_key: str, tz: ZoneInfo) -> tuple[datetime, datet
 
 @router.get("/api/ops/timeline")
 def ops_timeline(
+    request: Request,
     range_key: str = Query("today", description="时间范围：today/week/month/all"),
     end_ts: int | None = Query(None, description="可选覆盖结束时间，Unix 秒"),
     env: str | None = Query(None, description="可选 .env 文件路径"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     tz = ZoneInfo("Asia/Shanghai")
     start_dt, default_end, bucket_seconds, cumulative = _normalize_time_range(range_key, tz)
 
@@ -564,34 +587,39 @@ def ops_timeline(
 
 
 @router.get("/api/room_gift_list")
-def room_gift_list(env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端")):
-    settings = get_settings(_resolve_env(env))
+def room_gift_list(
+    request: Request,
+    env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
+):
+    settings = _settings_for_request(request, env)
     return fetch_room_gift_list(settings)
 
 
 @router.get("/api/summary")
 def summary(
+    request: Request,
     start_ts: int | None = Query(None, description="开始时间（Unix 秒）"),
     end_ts: int | None = Query(None, description="结束时间（Unix 秒）"),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     return query_flow_summary(settings, start_ts=start_ts, end_ts=end_ts)
 
 
 @router.get("/api/settings")
-def read_settings(env: str | None = Query(None, description="可选 .env 文件路径")):
-    settings = get_settings(_resolve_env(env))
+def read_settings(request: Request, env: str | None = Query(None, description="可选 .env 文件路径")):
+    settings = _settings_for_request(request, env)
     return _serialize_settings(settings)
 
 
 @router.post("/api/settings")
 def update_settings(
+    request: Request,
     payload: SettingsPayload = Body(..., description="配置内容"),
     env: str | None = Query(None, description="可选 .env 文件路径"),
 ):
     env_payload = _env_payload_from_settings(payload)
-    resolved_env = _resolve_env(env)
+    resolved_env = _resolve_env(request, env)
     save_env(env_payload, resolved_env)
     settings = get_settings(resolved_env)
     return _serialize_settings(settings)
@@ -599,11 +627,12 @@ def update_settings(
 
 @router.get("/api/check")
 def check(
+    request: Request,
     uname: str = Query(...),
     gift_name: str = Query(...),
     env: str | None = Query(None, description="可选 .env 文件路径，用于绑定前端/后端"),
 ):
-    settings = get_settings(_resolve_env(env))
+    settings = _settings_for_request(request, env)
     rows = query_gifts_by_uname_and_gift(settings, uname=uname, gift_name=gift_name, limit=1)
     if not rows:
         return {"found": False, "latest": None}

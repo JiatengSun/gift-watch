@@ -531,6 +531,7 @@
         <button class="toggle-btn" data-view-target="tablet">平板</button>
         <button class="toggle-btn" data-view-target="ops">运营</button>
         <button class="toggle-btn" data-view-target="console">控制</button>
+        <button class="toggle-btn" id="btnLogout">退出</button>
       </div>
     </div>
 
@@ -2277,6 +2278,11 @@ document.querySelectorAll("[data-range]").forEach((btn) => {
       .forEach((item) => item.classList.toggle("active", item.dataset.range === activeRange));
     refreshSummary();
   });
+});
+
+document.getElementById("btnLogout")?.addEventListener("click", async () => {
+  await fetch("/api/access/logout", { method: "POST" });
+  window.location.href = "/access";
 });
 
 initView("desktop");

@@ -94,6 +94,33 @@ uvicorn web.app:app --host 0.0.0.0 --port 5555 --env-file .env-xsz
 
 你可以用 VS Code 的 Port Forwarding 将 3333 共享给其他人查看；如果用自定义端口（如上例的 5555），按对应端口转发即可。
 
+### 5) 访问密码门户（给多个主播共用一个入口）
+
+如果你不想公开列出主播名单，可以启用统一密码入口：
+
+- 公开入口：`/access`
+- 主播输入各自密码后进入自己的页面
+- 管理员输入管理员密码后进入 `/manager`
+
+配置方式：
+
+1. 在公共 Web 实例使用的环境变量里设置：
+```env
+MANAGER_PORTAL_PASSWORD=你自己的管理员密码
+ACCESS_COOKIE_SECRET=尽量长的随机字符串
+```
+
+2. 在每个主播对应的 `.env-*` 文件里设置：
+```env
+PORTAL_PASSWORD=该主播的专属密码
+```
+
+注意：
+
+- 每个 `PORTAL_PASSWORD` 必须唯一，不能重复
+- 公开主页只需要把入口指向 `gift-watch.cara4lyfe.top/access`
+- 主播登录后只会看到自己绑定的 `.env-*` 数据；管理员密码会进入管理页
+
 ## 目录结构
 ```
 gift-watch/

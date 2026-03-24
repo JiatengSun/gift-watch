@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, RedirectResponse
 
 from config.settings import get_settings, resolve_env_file
 from db.sqlite import init_db
+from web.access_routes import router as access_router
+from web.auth import get_current_session
 from web.routes import router
 from web.manager_routes import router as manager_router
 from services.gift_price_cache import ensure_gift_price_cache
@@ -25,16 +26,28 @@ def _startup():
 
 app.include_router(router)
 app.include_router(manager_router)
+app.include_router(access_router)
+
+
+@app.get("/")
+def home(request: Request):
+    session = get_current_session(request)
+    if not session:
+        return RedirectResponse("/access", status_code=302)
+    return RedirectResponse("/manager" if session.role == "manager" else "/app", status_code=302)
+
+
+@app.get("/app")
+def app_page(request: Request):
+    session = get_current_session(request)
+    if not session:
+        return RedirectResponse("/access", status_code=302)
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/manager")
-def manager_page():
+def manager_page(request: Request):
+    session = get_current_session(request)
+    if not session or session.role != "manager":
+        return RedirectResponse("/access", status_code=302)
     return FileResponse(STATIC_DIR / "manager.html")
-
-# Mount the static frontend with HTML fallback so "/" and any client-side
-# routes serve the index page instead of a 404 (e.g., when proxied by nginx).
-app.mount(
-    "/",
-    StaticFiles(directory=STATIC_DIR, html=True),
-    name="static",
-)
