@@ -12,6 +12,7 @@ from typing import Literal
 
 from dotenv import dotenv_values
 from fastapi import HTTPException, Request, Response
+from web.pathing import get_base_path
 
 COOKIE_NAME = "gift_watch_portal"
 COOKIE_MAX_AGE_SEC = 60 * 60 * 12
@@ -96,6 +97,7 @@ def parse_session_token(token: str | None) -> PortalSession | None:
 
 
 def attach_session_cookie(response: Response, request: Request, session: PortalSession) -> None:
+    cookie_path = get_base_path() or "/"
     response.set_cookie(
         key=COOKIE_NAME,
         value=create_session_token(session),
@@ -103,17 +105,18 @@ def attach_session_cookie(response: Response, request: Request, session: PortalS
         httponly=True,
         samesite="lax",
         secure=_is_https_request(request),
-        path="/",
+        path=cookie_path,
     )
 
 
 def clear_session_cookie(response: Response, request: Request) -> None:
+    cookie_path = get_base_path() or "/"
     response.delete_cookie(
         key=COOKIE_NAME,
         httponly=True,
         samesite="lax",
         secure=_is_https_request(request),
-        path="/",
+        path=cookie_path,
     )
 
 

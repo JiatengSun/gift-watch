@@ -115,6 +115,17 @@
   </div>
 
   <script>
+    const detectBasePath = () => {
+      const path = window.location.pathname.replace(/\/$/, "");
+      if (path.endsWith("/access")) {
+        return path.slice(0, -"/access".length) || "";
+      }
+      return "";
+    };
+
+    const BASE_PATH = detectBasePath();
+    const withBase = (path) => `${BASE_PATH}${path}`;
+
     const form = document.getElementById("loginForm");
     const input = document.getElementById("passwordInput");
     const statusEl = document.getElementById("status");
@@ -127,7 +138,7 @@
 
     const redirectIfLoggedIn = async () => {
       try {
-        const resp = await fetch("/api/access/session", { credentials: "same-origin" });
+        const resp = await fetch(withBase("/api/access/session"), { credentials: "same-origin" });
         if (!resp.ok) return;
         const data = await resp.json();
         if (data?.authenticated && data?.destination) {
@@ -148,7 +159,7 @@
       setStatus("正在验证...", "success");
 
       try {
-        const resp = await fetch("/api/access/login", {
+        const resp = await fetch(withBase("/api/access/login"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password }),
@@ -159,7 +170,7 @@
           throw new Error(data?.detail || `HTTP ${resp.status}`);
         }
         setStatus("验证成功，正在跳转...", "success");
-        window.location.href = data.destination || "/app";
+        window.location.href = data.destination || withBase("/app");
       } catch (err) {
         setStatus(err.message || String(err), "error");
       } finally {

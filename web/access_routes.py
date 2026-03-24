@@ -12,6 +12,7 @@ from web.auth import (
     get_current_session,
     resolve_password_session,
 )
+from web.pathing import with_base_path
 
 router = APIRouter()
 
@@ -23,7 +24,7 @@ class LoginPayload(BaseModel):
 
 
 def _destination_for_role(role: str) -> str:
-    return "/manager" if role == "manager" else "/app"
+    return with_base_path("/manager" if role == "manager" else "/app")
 
 
 @router.get("/access")

@@ -1010,10 +1010,21 @@ const getRangeTimestamps = (rangeKey) => {
   return { start_ts: Math.floor(start.getTime() / 1000), end_ts: Math.floor(targetNow.getTime() / 1000) };
 };
 
+const detectBasePath = () => {
+  const path = window.location.pathname.replace(/\/$/, "");
+  if (path.endsWith("/app")) {
+    return path.slice(0, -"/app".length) || "";
+  }
+  return "";
+};
+
+const BASE_PATH = detectBasePath();
+
 const buildUrl = (path, params) => {
   const searchParams = params instanceof URLSearchParams ? params : new URLSearchParams(params || {});
   const qs = searchParams.toString();
-  return qs ? `${path}?${qs}` : path;
+  const target = `${BASE_PATH}${path}`;
+  return qs ? `${target}?${qs}` : target;
 };
 
 const renderTable = (container, rows, columns, emptyText = "暂无数据") => {
@@ -2281,8 +2292,8 @@ document.querySelectorAll("[data-range]").forEach((btn) => {
 });
 
 document.getElementById("btnLogout")?.addEventListener("click", async () => {
-  await fetch("/api/access/logout", { method: "POST" });
-  window.location.href = "/access";
+  await fetch(buildUrl("/api/access/logout"), { method: "POST" });
+  window.location.href = `${BASE_PATH}/access`;
 });
 
 initView("desktop");

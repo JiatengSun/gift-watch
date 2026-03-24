@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from config.env_store import save_env
 from web.auth import require_manager_session
+from web.pathing import with_base_path
 
 router = APIRouter()
 
@@ -263,7 +264,7 @@ def manager_instances(request: Request) -> list[dict[str, Any]]:
                 "web_running": wpid is not None,
                 "web_pid": wpid,
                 "web_log": str(_log_file(env_file, "web")),
-                "web_url": f"http://127.0.0.1:{web_port}/",
+                "web_url": f"http://127.0.0.1:{web_port}{with_base_path('/')}",
             }
         )
     return out

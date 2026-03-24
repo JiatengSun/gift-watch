@@ -79,6 +79,16 @@
   <div id="logBox" class="log-box"></div>
 
   <script>
+    const detectBasePath = () => {
+      const path = window.location.pathname.replace(/\/$/, "");
+      if (path.endsWith("/manager")) {
+        return path.slice(0, -"/manager".length) || "";
+      }
+      return "";
+    };
+    const BASE_PATH = detectBasePath();
+    const withBase = (path) => `${BASE_PATH}${path}`;
+
     const statusEl = document.getElementById("status");
     const rowsEl = document.getElementById("rows");
     const autoBtn = document.getElementById("btnAutoRefresh");
@@ -88,7 +98,7 @@
     let knownInstances = [];
 
     const callApi = async (path, method = "GET", body = null) => {
-      const resp = await fetch(path, {
+      const resp = await fetch(withBase(path), {
         method,
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
@@ -145,7 +155,7 @@
         const inputId = `port-${it.env_file.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
         const pendingPort = pendingPorts.get(it.env_file);
         const shownPort = Number.isFinite(pendingPort) ? pendingPort : it.web_port;
-        const openUrl = `${window.location.protocol}//${window.location.hostname}:${it.web_port}/`;
+        const openUrl = `${window.location.protocol}//${window.location.hostname}:${it.web_port}${BASE_PATH || "/gift-watch"}/`;
         tr.innerHTML = `
           <td><code>${it.env_file}</code></td>
           <td>
@@ -234,8 +244,8 @@
 
     document.getElementById("btnRefresh").addEventListener("click", refresh);
     document.getElementById("btnLogout").addEventListener("click", async () => {
-      await fetch("/api/access/logout", { method: "POST" });
-      window.location.href = "/access";
+      await fetch(withBase("/api/access/logout"), { method: "POST" });
+      window.location.href = withBase("/access");
     });
     document.getElementById("btnStartAll").addEventListener("click", async () => {
       try {

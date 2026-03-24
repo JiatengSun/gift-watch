@@ -98,9 +98,9 @@ uvicorn web.app:app --host 0.0.0.0 --port 5555 --env-file .env-xsz
 
 如果你不想公开列出主播名单，可以启用统一密码入口：
 
-- 公开入口：`/access`
+- 公开入口：`/gift-watch/access`
 - 主播输入各自密码后进入自己的页面
-- 管理员输入管理员密码后进入 `/manager`
+- 管理员输入管理员密码后进入 `/gift-watch/manager`
 
 配置方式：
 
@@ -118,7 +118,7 @@ PORTAL_PASSWORD=该主播的专属密码
 注意：
 
 - 每个 `PORTAL_PASSWORD` 必须唯一，不能重复
-- 公开主页只需要把入口指向 `gift-watch.cara4lyfe.top/access`
+- 公开主页只需要把入口指向 `/gift-watch/access`
 - 主播登录后只会看到自己绑定的 `.env-*` 数据；管理员密码会进入管理页
 
 ### 6) 统一 Web 门户启动（推荐 Ubuntu）
@@ -133,7 +133,7 @@ bash ./scripts/start_web_portal.sh .env-lqx 9999
 然后访问：
 
 ```text
-http://你的公网IP:9999/access
+http://你的公网IP:9999/gift-watch/access
 ```
 
 停止：
@@ -148,6 +148,7 @@ bash ./scripts/stop_web_portal.sh .env-lqx 9999
 - 这个统一入口实例会读取所有 `.env-*` 里的 `PORTAL_PASSWORD`
 - 主播输入自己的密码后，会在同一个 Web 门户里看到自己绑定的数据
 - 你只需要保留一个对外开放的 Web 端口，例如 `9999`
+- 如果前面挂了 `nginx`，建议把外部路径统一代理到 `/gift-watch/*`
 
 ## 目录结构
 ```
