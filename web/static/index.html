@@ -683,6 +683,7 @@
           <h2>感谢与定时弹幕配置</h2>
           <span class="muted">保存后会写入当前后端使用的 .env</span>
         </div>
+        <p class="hint" id="botIdentityStatus" style="margin:8px 0 12px;">发送号检测中...</p>
 
         <div class="settings-grid">
           <div class="settings-block">
@@ -972,6 +973,22 @@ const setSettingsStatus = (message, tone = "info") => {
     status.style.color = tone === "error" ? "#f472b6" : "var(--muted)";
   }
   logConsole(message, tone);
+};
+
+const setBotIdentityStatus = (payload) => {
+  const el = document.getElementById("botIdentityStatus");
+  if (!el) return;
+  const status = payload?.status || "missing_credentials";
+  const message = payload?.message || "未配置发送号登录态";
+  const envLabel = BOUND_ENV ? `当前实例 ${BOUND_ENV}` : "当前实例";
+  el.textContent = `${envLabel} 发送号：${message}`;
+  if (status === "ok") {
+    el.style.color = "#86efac";
+  } else if (status === "login_required") {
+    el.style.color = "#fbbf24";
+  } else {
+    el.style.color = "var(--muted)";
+  }
 };
 
 const getTargetNow = (offsetMinutes) => {
@@ -1923,8 +1940,22 @@ const loadSettings = async () => {
     applySettingsToForm(data);
     viewState.console.settingsLoaded = true;
     setSettingsStatus("已加载当前配置", "success");
+    await loadBotIdentity();
   } catch (err) {
     setSettingsStatus(`加载配置失败：${err.message || err}`, "error");
+  }
+};
+
+const loadBotIdentity = async () => {
+  try {
+    const resp = await fetch(buildUrl("/api/bot_identity"));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    setBotIdentityStatus(data);
+  } catch (err) {
+    setBotIdentityStatus({ status: "request_failed", message: `检测失败：${err.message || err}` });
   }
 };
 
@@ -1943,6 +1974,7 @@ const saveSettings = async () => {
     applySettingsToForm(data);
     setSettingsStatus("保存成功，已写入 .env", "success");
     viewState.console.settingsLoaded = true;
+    await loadBotIdentity();
   } catch (err) {
     setSettingsStatus(`保存失败：${err.message || err}`, "error");
   }

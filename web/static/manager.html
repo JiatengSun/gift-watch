@@ -19,8 +19,10 @@
     th { color: #93c5fd; font-weight: 600; }
     .ok { color: #22c55e; font-weight: 600; }
     .bad { color: #f43f5e; font-weight: 600; }
+    .warn { color: #fbbf24; font-weight: 600; }
     a { color: #60a5fa; text-decoration: none; }
     .port-input { width: 92px; padding: 4px 6px; border-radius: 6px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
+    .identity-cell { min-width: 180px; }
     .log-box {
       margin-top: 16px;
       border: 1px solid #334155;
@@ -53,6 +55,7 @@
     <thead>
       <tr>
         <th>Env</th>
+        <th>发送号</th>
         <th>前端端口</th>
         <th>前端状态</th>
         <th>后端状态</th>
@@ -127,6 +130,14 @@
       return await resp.json();
     };
 
+    const escapeHtml = (value) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
     const actionBtn = (label, onClick) => {
       const btn = document.createElement("button");
       btn.textContent = label;
@@ -155,7 +166,7 @@
       if (!items.length) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 5;
+        td.colSpan = 6;
         td.className = "muted";
         td.textContent = "未发现 .env-* 文件";
         tr.appendChild(td);
@@ -169,8 +180,14 @@
         const pendingPort = pendingPorts.get(it.env_file);
         const shownPort = Number.isFinite(pendingPort) ? pendingPort : it.web_port;
         const openUrl = `${window.location.origin}${withTicket(`/app?env=${encodeURIComponent(it.env_file)}`)}`;
+        const identity = it.bot_identity || {};
+        const identityStatus = identity.status || "missing_credentials";
+        const identityClass = identityStatus === "ok" ? "ok" : (identityStatus === "login_required" ? "warn" : "bad");
+        const identityText = escapeHtml(identity.message || "未配置发送号登录态");
+        const envText = escapeHtml(it.env_file);
         tr.innerHTML = `
-          <td><code>${it.env_file}</code></td>
+          <td><code>${envText}</code></td>
+          <td class="identity-cell ${identityClass}">${identityText}</td>
           <td>
             <div class="row" style="margin:0;">
               <input id="${inputId}" class="port-input" type="number" min="1" max="65535" value="${shownPort}" />

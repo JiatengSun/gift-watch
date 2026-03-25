@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from config.env_store import save_env
+from services.bot_identity_service import detect_bot_identity
 from web.auth import require_manager_session
 from web.pathing import with_base_path
 
@@ -254,6 +255,7 @@ def manager_instances(request: Request) -> list[dict[str, Any]]:
         web_port = _resolve_web_port(env_file)
         cpid = _running_pid(_pid_file(env_file, "collector"))
         wpid = _running_pid(_pid_file(env_file, "web"))
+        bot_identity = detect_bot_identity(env_file)
         out.append(
             {
                 "env_file": env_file,
@@ -265,6 +267,7 @@ def manager_instances(request: Request) -> list[dict[str, Any]]:
                 "web_pid": wpid,
                 "web_log": str(_log_file(env_file, "web")),
                 "web_url": f"http://127.0.0.1:{web_port}{with_base_path('/')}",
+                "bot_identity": bot_identity,
             }
         )
     return out

@@ -25,6 +25,7 @@ from db.repo import (
 )
 from services.gift_list_service import fetch_room_gift_list
 from db.sqlite import init_db
+from services.bot_identity_service import detect_bot_identity
 from web.auth import resolve_allowed_env
 
 router = APIRouter()
@@ -610,6 +611,12 @@ def summary(
 def read_settings(request: Request, env: str | None = Query(None, description="可选 .env 文件路径")):
     settings = _settings_for_request(request, env)
     return _serialize_settings(settings)
+
+
+@router.get("/api/bot_identity")
+def read_bot_identity(request: Request, env: str | None = Query(None, description="可选 .env 文件路径")):
+    resolved_env = _resolve_env(request, env)
+    return detect_bot_identity(resolved_env)
 
 
 @router.post("/api/settings")
