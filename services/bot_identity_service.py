@@ -9,7 +9,7 @@ from typing import Any
 
 from config.settings import get_settings, resolve_env_file
 
-_CACHE_TTL_SEC = 60
+_CACHE_TTL_SEC = 300
 _CACHE_LOCK = threading.Lock()
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
@@ -76,7 +76,7 @@ def detect_bot_identity(env_file: str | None) -> dict[str, Any]:
     result = dict(payload)
     result["configured"] = True
     try:
-        with urllib.request.urlopen(request, timeout=5) as resp:
+        with urllib.request.urlopen(request, timeout=2) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         result["status"] = "request_failed"

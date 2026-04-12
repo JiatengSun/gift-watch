@@ -109,6 +109,7 @@
     const rowsEl = document.getElementById("rows");
     const autoBtn = document.getElementById("btnAutoRefresh");
     const pendingPorts = new Map();
+    const identityCache = new Map();
     let autoRefreshEnabled = true;
     let isEditingPort = false;
     let knownInstances = [];
@@ -143,6 +144,62 @@
       btn.textContent = label;
       btn.addEventListener("click", onClick);
       return btn;
+    };
+
+    const getIdentityClass = (status) => {
+      if (status === "ok") return "ok";
+      if (status === "login_required") return "warn";
+      if (status === "loading") return "muted";
+      return "bad";
+    };
+
+    const renderIdentityCell = (envFile, payload) => {
+      const safeEnv = envFile.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const cell = document.getElementById(`identity-${safeEnv}`);
+      if (!cell) return;
+      const status = payload?.status || "missing_credentials";
+      const message = escapeHtml(payload?.message || "未配置发送号登录态");
+      cell.className = `identity-cell ${getIdentityClass(status)}`;
+      cell.textContent = message;
+    };
+
+    const fetchIdentity = async (envFile, { force = false } = {}) => {
+      const cached = identityCache.get(envFile);
+      const now = Date.now();
+      if (!force && cached && cached.data && now - cached.fetchedAt < 5 * 60 * 1000) {
+        renderIdentityCell(envFile, cached.data);
+        return cached.data;
+      }
+      if (cached?.pending) {
+        return cached.pending;
+      }
+      renderIdentityCell(envFile, { status: "loading", message: "检测中..." });
+      const pending = callApi(`/api/manager/bot_identity?env_file=${encodeURIComponent(envFile)}`)
+        .then((data) => {
+          identityCache.set(envFile, { data, fetchedAt: Date.now() });
+          renderIdentityCell(envFile, data);
+          return data;
+        })
+        .catch((err) => {
+          const data = { status: "request_failed", message: `检测失败：${err.message || err}` };
+          identityCache.set(envFile, { data, fetchedAt: Date.now() });
+          renderIdentityCell(envFile, data);
+          return data;
+        })
+        .finally(() => {
+          const latest = identityCache.get(envFile);
+          if (latest?.pending) {
+            delete latest.pending;
+          }
+        });
+      identityCache.set(envFile, { ...(cached || {}), pending });
+      return pending;
+    };
+
+    const refreshIdentityCells = async (items, { force = false } = {}) => {
+      for (const it of items || []) {
+        await fetchIdentity(it.env_file, { force });
+      }
     };
 
     const syncLogEnvSelect = (items) => {
@@ -180,14 +237,11 @@
         const pendingPort = pendingPorts.get(it.env_file);
         const shownPort = Number.isFinite(pendingPort) ? pendingPort : it.web_port;
         const openUrl = `${window.location.origin}${withTicket(`/app?env=${encodeURIComponent(it.env_file)}`)}`;
-        const identity = it.bot_identity || {};
-        const identityStatus = identity.status || "missing_credentials";
-        const identityClass = identityStatus === "ok" ? "ok" : (identityStatus === "login_required" ? "warn" : "bad");
-        const identityText = escapeHtml(identity.message || "未配置发送号登录态");
+        const safeEnv = it.env_file.replace(/[^a-zA-Z0-9_-]/g, "_");
         const envText = escapeHtml(it.env_file);
         tr.innerHTML = `
           <td><code>${envText}</code></td>
-          <td class="identity-cell ${identityClass}">${identityText}</td>
+          <td id="identity-${safeEnv}" class="identity-cell muted">检测中...</td>
           <td>
             <div class="row" style="margin:0;">
               <input id="${inputId}" class="port-input" type="number" min="1" max="65535" value="${shownPort}" />
@@ -247,6 +301,7 @@
         statusEl.textContent = "刷新中...";
         const data = await callApi("/api/manager/instances");
         render(data);
+        refreshIdentityCells(data);
         statusEl.textContent = `最近刷新: ${new Date().toLocaleTimeString()}`;
       } catch (err) {
         statusEl.textContent = `刷新失败: ${err.message || err}`;

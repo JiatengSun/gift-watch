@@ -13,9 +13,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from config.env_store import save_env
-from services.bot_identity_service import detect_bot_identity
 from web.auth import require_manager_session
 from web.pathing import with_base_path
+from services.bot_identity_service import detect_bot_identity
 
 router = APIRouter()
 
@@ -255,7 +255,6 @@ def manager_instances(request: Request) -> list[dict[str, Any]]:
         web_port = _resolve_web_port(env_file)
         cpid = _running_pid(_pid_file(env_file, "collector"))
         wpid = _running_pid(_pid_file(env_file, "web"))
-        bot_identity = detect_bot_identity(env_file)
         out.append(
             {
                 "env_file": env_file,
@@ -267,10 +266,23 @@ def manager_instances(request: Request) -> list[dict[str, Any]]:
                 "web_pid": wpid,
                 "web_log": str(_log_file(env_file, "web")),
                 "web_url": f"http://127.0.0.1:{web_port}{with_base_path('/')}",
-                "bot_identity": bot_identity,
             }
         )
     return out
+
+
+@router.get("/api/manager/bot_identity")
+def manager_bot_identity(
+    request: Request,
+    env_file: str = Query(..., description="Env file name, e.g. .env-lqx"),
+) -> dict[str, Any]:
+    require_manager_session(request)
+    env_file = env_file.strip()
+    if not env_file:
+        raise HTTPException(status_code=400, detail="env_file required")
+    if not (PROJECT_ROOT / env_file).exists():
+        raise HTTPException(status_code=404, detail=f"env file not found: {env_file}")
+    return detect_bot_identity(env_file)
 
 
 @router.post("/api/manager/start")
