@@ -783,11 +783,11 @@
             </div>
             <div class="field">
               <label>盈亏回复模板
-                <textarea id="blindBoxTemplateInput" placeholder="{uname} 心动盲盒投入¥{base_cost_yuan}，产出¥{reward_value_yuan}，盈亏¥{profit_yuan}"></textarea>
+                <textarea id="blindBoxTemplateInput" placeholder="{uname} {base_gift}{profit_result}"></textarea>
               </label>
-              <p class="hint">占位符：{uname} / {uid} / {base_cost} / {reward_value} / {profit} / {base_cost_yuan} / {reward_value_yuan} / {profit_yuan} / {profit_sign} / {base_gift}</p>
+              <p class="hint">占位符：{uname} / {uid} / {base_cost} / {reward_value} / {profit} / {base_cost_yuan} / {reward_value_yuan} / {profit_yuan} / {profit_abs_yuan} / {profit_sign} / {profit_text} / {profit_result} / {profit_state} / {profit_status} / {base_gift}</p>
             </div>
-            <p class="hint">收到触发短句后会查询该用户的盲盒记录，基础礼物固定为“心动盲盒”且不会入库，开出的礼物会入库并按礼物实际金额计算盈亏，同时在控制台打印日志。</p>
+            <p class="hint">收到触发短句后会查询该用户的盲盒记录，基础礼物固定为“心动盲盒”且不会入库，开出的礼物会入库并按礼物实际金额计算盈亏，同时在控制台打印日志。推荐用 {profit_result}，效果类似“赚120 / 亏15 / 持平”。</p>
           </div>
         </div>
 

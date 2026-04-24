@@ -195,7 +195,7 @@ def get_settings(env_file: str | None = None) -> Settings:
     )
     blind_box_template = _get_env(
         "BLIND_BOX_TEMPLATE",
-        "{uname} 心动盲盒投入¥{base_cost_yuan}，产出¥{reward_value_yuan}，盈亏¥{profit_yuan}",
+        "{uname} {base_gift}{profit_result}",
         env,
     )
     blind_box_send_danmaku = _get_env("BLIND_BOX_SEND_DANMAKU", "1", env) == "1"

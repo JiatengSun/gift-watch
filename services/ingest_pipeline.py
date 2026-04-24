@@ -5,6 +5,7 @@ import logging
 import asyncio
 import time
 import json
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -43,6 +44,7 @@ def json_dumps_safe(payload: Any) -> str:
 class IngestPipeline:
     THANK_DELAY_SECONDS = 5
     SHARE_DEDUP_CACHE_SECONDS = 3
+    _BLIND_BOX_PROFIT_PATTERN = re.compile(r"盈亏\s*¥?\s*([+-]?\d+(?:\.\d+)?)")
 
     def __init__(
         self,
@@ -497,8 +499,40 @@ class IngestPipeline:
         except Exception:
             return template
 
+    def _format_blind_box_profit_text(self, profit: int) -> str:
+        amount = self._format_currency(abs(profit))
+        if profit > 0:
+            return f"赚{amount}"
+        if profit < 0:
+            return f"亏{amount}"
+        return "持平"
+
+    def _rewrite_blind_box_message(self, message: str, profit: int) -> str:
+        if not message:
+            return message
+
+        replacement = self._format_blind_box_profit_text(profit)
+        rewritten = self._BLIND_BOX_PROFIT_PATTERN.sub(replacement, message)
+
+        normalized = message.strip()
+        signed_amount = self._format_currency(profit)
+        bare_amounts = {signed_amount, f"¥{signed_amount}", f"盈亏{signed_amount}", f"盈亏¥{signed_amount}"}
+        if profit > 0:
+            plus_amount = f"+{self._format_currency(abs(profit))}"
+            bare_amounts.update({plus_amount, f"¥{plus_amount}", f"盈亏{plus_amount}", f"盈亏¥{plus_amount}"})
+        if normalized in bare_amounts:
+            rewritten = replacement
+
+        if rewritten != message and self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                "盲盒弹幕文案已改写以提升可见性 before=%s after=%s",
+                message,
+                rewritten,
+            )
+        return rewritten
+
     def _default_blind_box_template(self) -> str:
-        return "{uname} 心动盲盒投入¥{base_cost_yuan}，产出¥{reward_value_yuan}，盈亏{profit_sign}{profit_abs_yuan}"
+        return "{uname} {base_gift}{profit_result}"
 
     def _should_reply_blind_box(self, key: Any, ts: float) -> bool:
         cooldown_sec = 5
@@ -601,6 +635,10 @@ class IngestPipeline:
             "profit_yuan": self._format_currency(profit),
             "profit_abs_yuan": self._format_currency(abs(profit)),
             "profit_sign": "+" if profit >= 0 else "-",
+            "profit_text": self._format_blind_box_profit_text(profit),
+            "profit_result": self._format_blind_box_profit_text(profit),
+            "profit_state": "赚" if profit > 0 else ("亏" if profit < 0 else "平"),
+            "profit_status": "盈利" if profit > 0 else ("亏损" if profit < 0 else "持平"),
             "base_gift": self.settings.blind_box_base_gift,
         }
 
@@ -611,15 +649,17 @@ class IngestPipeline:
         message = self._render_template(template, **context).strip()
         if not message:
             message = self._render_template(self._default_blind_box_template(), **context)
+        message = self._rewrite_blind_box_message(message, profit).strip()
 
         self.logger.info(
-            "盲盒查询：uid=%s uname=%s 触发词=%s 投入=%s 产出=%s 盈亏=%s",
+            "盲盒查询：uid=%s uname=%s 触发词=%s 投入=%s 产出=%s 盈亏=%s 回复=%s",
             uid,
             context["uname"],
             content,
             base_total,
             reward_total,
             profit,
+            message,
         )
 
         if self.settings.blind_box_send_danmaku and self.sender:
